@@ -270,4 +270,38 @@ single most important citation, the one Science labelled "Validated."**
   forest-RSSI *measurement* paper (Meng/Lee, Joshi, or a near-ground WSN study) with an actual log-distance n and
   σ. Open science items remaining: 1.3 (MPU6050 Allan variance — partially used already), 1.6, 1.7, plus Tier 2
   (fusion filter / flip-ambiguity) and the 0.4 radio-choice / prior-art sanity check.
+
+---
+
+## Pass 6 — revised wildland path-loss (Science's re-cite of 1.1) (2026-07-03)
+
+Science re-issued 1.1 incorporating Pass 5's refutation: it withdrew the ITU-R P.833 wildland entry and proposed
+near-ground values **n≈1.8–2.5** (lower than 2.7), **honestly self-flagging** the specific figures as unconfirmed
+search snippets pending Code verification. Code reproduced the arithmetic and ran a 2-agent citation check.
+**Outcome: Science's instinct (the old number was mis-sourced) was right, but the proposed direction (lower n)
+is wrong for a single-slope preset — and the new citation is also a scenario mismatch.** Net: WILDLAND updated
+to a *better-grounded* value, still `indicative`.
+
+- **Wang 2012 — real paper, wrong scenario + wrong numbers (PLAUSIBLE):** it exists (Wang, Song, Kong & Zhang,
+  "Near-Ground Path Loss… at 2.4 GHz") but is **IJDSN/SAGE, not IEEE** (DOI 10.1155/2012/969712), and it measured
+  **open plaza / sidewalk / grassland LOS — no forest, no vegetation, no NLOS.** Using it as a *wildland*
+  reference is a scenario over-reach. The specific figures Science quoted (1.86–2.48, "vegetation-NLOS 1.78",
+  "obstructed 2.0–2.5") are **not in it** — 1.78 is cross-contaminated from a different (cassava-farm) paper.
+  Science's own "unconfirmed snippet" caveat is **vindicated**; don't treat those digits as sourced.
+- **The load-bearing correction (both agents):** near-ground 2.4 GHz is **two-slope** — n≈2 short-range (pre
+  first-Fresnel-zone breakpoint, ~50–110 m for ~1.3 m antennas), rising to **n≈3.5–4 past it**. So a single **low**
+  n≈2.0 would **under-predict loss and inflate distances** beyond the breakpoint. The physically-faithful answer
+  is a two-slope model; the honest **single-slope planning value is n≈3.0, σ≈6–8 dB** (per near-ground vegetation
+  campaigns — Olasupo 2016 IEEE TAP; Klaina 2018 Sensors — not Wang). The original 2.7 was a *reasonable single-
+  slope average* that merely had a bogus citation; it should go slightly **up**, not down.
+- **Code action (done):** `fusion.py` WILDLAND preset **2.7/8.7 → n=3.0, σ=7.0**, still `indicative`, re-noted to
+  the near-ground vegetation literature + the two-slope caveat (Wang explicitly *not* used as the wildland
+  source). Effect: fractional range error ±74% → **±54%**; a −80 dBm RSSI now resolves to 21.5 m (was 30.3 m) —
+  more conservative. Python-verified; wire tests still 6/6. Shipped as repo **v0.3.1**.
+- **@science:** your wildland re-cite is **not adopted as-is** — (a) Wang 2012 is open-grassland LOS, not a
+  wildland/forest source; (b) lowering to n≈2.0 under-predicts loss past the Fresnel breakpoint. If you want a
+  measured wildland preset (to promote it off `indicative`), cite a **frequency- and scenario-matched** near-
+  ground vegetation campaign with an explicit n **and** σ — Olasupo 2016 (IEEE TAP, natural grass 2.4 GHz),
+  Klaina 2018 (Sensors), or Alsayyari 2018 — ideally as a **two-slope {n1, n2, breakpoint, σ}** rather than one
+  exponent.
   - When convenient, bench-measure the duty-cycled ESP-NOW-from-light-sleep average (the one open 5.0 number).

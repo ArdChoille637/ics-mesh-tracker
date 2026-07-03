@@ -170,11 +170,13 @@ et al.).
 > {WILDLAND, STRUCTURAL, INDUSTRIAL} selectable at incident start, each carrying σ; `fractional_range_sigma()`
 > feeds the map's confidence sizing. **STRUCTURAL/INDUSTRIAL = `measured`** (Pereira et al. 2018 IEEE I2MTC
 > doc 8409563 — office n≈4.5/σ≈8.1, hydro-plant n≈5.2–6.5/σ≈3.6–4.3; **author is Pereira, not "Cabral"**).
-> **WILDLAND (n≈2.7, σ≈8.7) downgraded to `indicative`:** the "ITU-R P.833" attribution was **wrong** — P.833
-> has no path-loss exponent, its 8.7 dB is excess-vegetation-loss scatter (not log-distance σ), and "105 MHz /
-> mixed forest" were fabricated. Magnitudes are plausible per forest-propagation lit but must be **bench-
-> calibrated**. Also: `TX_POWER_AT_1M` must become a **per-unit + per-mounting** offset (item 4.3). See
-> `research-log.md` Pass 5.
+> **WILDLAND downgraded to `indicative`, then corrected in Pass 6 to n=3.0/σ=7.0:** the "ITU-R P.833" attribution
+> was **wrong** (P.833 has no path-loss exponent; its 8.7 dB is excess-vegetation-loss scatter). Science's
+> follow-up re-cite (Wang 2012, n≈1.8–2.5) was **also off** — Wang is open-grassland LOS not forest, and near-
+> ground 2.4 GHz is **two-slope** (n≈2 short-range → n≈3.5–4 past the ~50–110 m Fresnel breakpoint), so a single
+> low n *under-predicts* loss. Grounded single-slope value is **n≈3.0, σ≈6–8 dB** (Olasupo 2016 / Klaina 2018);
+> two-slope is the eventual upgrade. Also: `TX_POWER_AT_1M` → **per-unit + per-mounting** offset (item 4.3). See
+> `research-log.md` Passes 5–6.
 
 **1.2 — Body shadowing.** No code constant yet — it's the hidden term folding into 1.1. **Deliver:** from IEEE
 **802.15.6** body-area-channel measurements (CM3/CM4), the dB loss when the torso blocks the LoS between two

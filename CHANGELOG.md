@@ -4,6 +4,18 @@ Iteration history for the ICS Mesh Tracker prototype. All dates 2026-07-03 (buil
 over one intensive session). Versions are development milestones, not releases —
 nothing here has run on real hardware yet (see each entry's "Verified" line).
 
+## v0.3.1 — Wildland path-loss preset corrected
+
+- `fusion.py` WILDLAND preset **n 2.7→3.0, σ 8.7→7.0** (still `indicative`). The
+  original pairing came from a mis-attributed ITU-R P.833 citation (withdrawn in
+  research Pass 5). A follow-up re-cite (Wang 2012, suggesting n≈2.0) was also
+  corrected: Wang measured open grassland LOS, not forest, and near-ground
+  2.4 GHz is two-slope (n≈2 short-range, rising to n≈3.5–4 past the Fresnel
+  breakpoint), so a single low exponent under-predicts loss. Grounded single-
+  slope value is n≈3.0/σ≈6–8 dB (near-ground vegetation campaigns). Fractional
+  range error ±74%→±54%. See `docs/research-log.md` Pass 6. Still bench-calibrate
+  before trusting; two-slope model is the eventual upgrade.
+
 ## v0.3.0 — Research-grounded positioning rewrite
 
 The positioning stack was re-grounded through a Code ⇄ Science research

@@ -65,17 +65,26 @@ class EnvPreset:
         return (math.log(10) / 10.0) * (self.shadowing_sigma_db / self.path_loss_n)
 
 
-# NOTE on provenance (research-log.md Pass 5): STRUCTURAL/INDUSTRIAL n/sigma are
-# from a real measured campaign (Pereira et al. 2018 IEEE I2MTC, doc 8409563 —
-# office + hydro-plant 2.4 GHz mesh RSSI). WILDLAND is `indicative`: the
-# magnitudes are plausible per the near-ground forest-propagation literature,
-# but the originally-cited "ITU-R P.833" attribution was WRONG (P.833 has no
-# path-loss exponent; its 8.7 dB is excess-vegetation-loss scatter, not
-# log-distance shadowing). Bench-calibrate every preset on the actual boards +
-# mounting before trusting distances (walk to 1/2/4/8 m per environment).
+# NOTE on provenance (research-log.md Passes 5-6): STRUCTURAL/INDUSTRIAL n/sigma
+# are from a real measured campaign (Pereira et al. 2018 IEEE I2MTC, doc 8409563
+# — office + hydro-plant 2.4 GHz mesh RSSI). WILDLAND is `indicative`:
+#   - The original "ITU-R P.833, n=2.7, sigma=8.7 dB" was WRONG (P.833 has no
+#     path-loss exponent; its 8.7 dB is excess-vegetation-loss scatter).
+#   - Near-ground 2.4 GHz is TWO-SLOPE (verified): n~2 in the short-range
+#     pre-breakpoint zone, rising to n~3.5-4 once the ground/vegetation pierces
+#     the first Fresnel zone (breakpoint ~50-110 m for ~1.3 m antennas). A single
+#     LOW n (~2.0) therefore UNDER-predicts loss and inflates distances past the
+#     breakpoint — so the single-slope planning value is n~3.0, sigma~6-8 dB
+#     (per near-ground vegetation campaigns: Olasupo 2016 IEEE TAP; Klaina 2018
+#     Sensors; and the two-slope WSN lit). Not from Wang 2012 (that's open
+#     grassland LOS, not forest).
+# Bench-calibrate every preset on the actual boards + mounting before trusting
+# distances (walk to 1/2/4/8 m per environment); a two-slope wildland model is
+# the eventual upgrade.
 ENV_PRESETS: dict[str, EnvPreset] = {
-    "WILDLAND":   EnvPreset("WILDLAND",   2.7, 8.7, -40.0, "indicative",
-                            "near-ground forest; magnitudes plausible, NOT from ITU-R P.833; bench-calibrate"),
+    "WILDLAND":   EnvPreset("WILDLAND",   3.0, 7.0, -40.0, "indicative",
+                            "near-ground 2.4 GHz over vegetation, single-slope planning value; TWO-SLOPE in "
+                            "reality (n~2 intra-team <~50 m, n~4 past the Fresnel breakpoint); bench-calibrate"),
     "STRUCTURAL": EnvPreset("STRUCTURAL", 4.5, 8.1, -40.0, "measured",
                             "office 2.4 GHz mesh (Pereira et al. 2018 I2MTC)"),
     "INDUSTRIAL": EnvPreset("INDUSTRIAL", 5.85, 4.0, -40.0, "measured",

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# SQLite runtime DB — live/derived telemetry, not source (rebuilt on startup)
+sbc-gateway/db/*.db
+sbc-gateway/db/*.db-journal
+
+# PlatformIO / firmware build artifacts
+.pio/
+firmware/.pio/
+*.bin
+*.elf
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/

@@ -70,26 +70,34 @@ class EnvPreset:
 # — office + hydro-plant 2.4 GHz mesh RSSI). WILDLAND is `indicative`:
 #   - The original "ITU-R P.833, n=2.7, sigma=8.7 dB" was WRONG (P.833 has no
 #     path-loss exponent; its 8.7 dB is excess-vegetation-loss scatter).
-#   - Near-ground 2.4 GHz is TWO-SLOPE (verified): n~2 in the short-range
-#     pre-breakpoint zone, rising to n~3.5-4 once the ground/vegetation pierces
-#     the first Fresnel zone (breakpoint ~50-110 m for ~1.3 m antennas). A single
-#     LOW n (~2.0) therefore UNDER-predicts loss and inflates distances past the
-#     breakpoint — so the single-slope planning value is n~3.0.
-#   - PROVENANCE (be honest): n~3.0 is supported by near-ground 2.4 GHz grass
-#     measurement campaigns — Olasupo 2016 (IEEE TAP, natural short/tall grass;
-#     grass exponents ~2.9-4) and Klaina 2018 (MDPI Sensors, three-slope, its
-#     obstructed slopes bracket 3.0). NOT from Wang 2012 (open grassland LOS).
-#     BUT sigma~7 dB is an ASSUMPTION from the general near-ground shadowing band
-#     (~4-8 dB), NOT quoted from those papers: Klaina reports no lognormal sigma
-#     at all, and Olasupo's sigma tables were unread (paywalled). So sigma is the
-#     least-grounded number here — bench-measure it first.
+#   - Near-ground 2.4 GHz is TWO-SLOPE: n~2 short-range, rising to n~3.5-4 past
+#     the first-Fresnel-zone breakpoint (~50-110 m for ~1.3 m antennas) — so a
+#     single LOW n (~2.0) UNDER-predicts loss; the single-slope planning value is
+#     n~3.0.
+#   - PROVENANCE (primary sources read 2026-07-04): n and sigma are now grounded
+#     in MEASURED vegetation campaigns, no longer assumed:
+#       * Schneider 2026 (Future Internet, 3.75 GHz vineyard LNS, RX @1.5 m =
+#         responder height) — alpha/sigma by foliage density: 2.27/7.21 (bare),
+#         3.28/8.21 (growing), 4.23/8.97 (dense canopy). THIS is the sigma source.
+#       * Olasupo 2016 (IEEE TAP, 2.4 GHz natural grass): grass exponents ~2.9-4.
+#       * Klaina 2018 (Sensors, 2.4 GHz near-ground): obstructed slopes bracket 3.
+#       * Boonlom 2026 (Sensors, 923 MHz LoRa): forest n=3.22 (LOS 2.31).
+#       * Barrios-Ulloa 2022 (Sensors, review): vegetated models carry high error.
+#     Convergent picture: vegetation n ~2.3 (light) -> ~3.3 (moderate) -> ~4.2
+#     (dense canopy), sigma ~7-9 dB rising with foliage density. Preset uses the
+#     MODERATE point n=3.0 / sigma=8.0.
+#     Still `indicative`: the sigma source is 3.75 GHz vineyard (not 2.4 GHz
+#     forest), so bench-calibrate on the actual boards; a density-parameterized
+#     or two-slope model is the eventual upgrade.
 # Bench-calibrate every preset on the actual boards + mounting before trusting
 # distances (walk to 1/2/4/8 m per environment); a two-slope wildland model is
 # the eventual upgrade.
 ENV_PRESETS: dict[str, EnvPreset] = {
-    "WILDLAND":   EnvPreset("WILDLAND",   3.0, 7.0, -40.0, "indicative",
-                            "near-ground 2.4 GHz over vegetation, single-slope planning value; TWO-SLOPE in "
-                            "reality (n~2 intra-team <~50 m, n~4 past the Fresnel breakpoint); bench-calibrate"),
+    "WILDLAND":   EnvPreset("WILDLAND",   3.0, 8.0, -40.0, "indicative",
+                            "near-ground vegetation, MODERATE-density single-slope; density-dependent per "
+                            "measured LNS (light n~2.3/sig~7.2, moderate n~3.3/sig~8.2, dense-canopy "
+                            "n~4.2/sig~9.0 — Schneider 2026 vineyard); two-slope past the Fresnel "
+                            "breakpoint; bench-calibrate"),
     "STRUCTURAL": EnvPreset("STRUCTURAL", 4.5, 8.1, -40.0, "measured",
                             "office 2.4 GHz mesh (Pereira et al. 2018 I2MTC)"),
     "INDUSTRIAL": EnvPreset("INDUSTRIAL", 5.85, 4.0, -40.0, "measured",

@@ -338,4 +338,40 @@ converged to a defensible `indicative` preset (WILDLAND n=3.0/σ=7, STRUCTURAL 4
 the sourcing needed heavy correction throughout — **the honest bottom line is that the wildland {n, σ} is
 bench-calibration territory, not a literature-settled fact.** Every wrong attribution was caught by an
 independent pass, including Code's own.
+
+---
+
+## Pass 8 — primary sources read; wildland σ grounded from measurement (2026-07-04)
+
+The user supplied the actual full-text PDFs the earlier agents couldn't reach (paywalled). Code read them and
+finally set the wildland `{n, σ}` from **measured** data rather than assumption. Key source:
+
+- **Schneider et al. 2026, "Explaining Seasonal 5G Path Loss in a Vineyard," Future Internet 18(5):237** — an LNS
+  fit `PL = PL(d0) + 10α·log10(d/d0) + Xσ` over a **vegetation-density gradient** at **3.75 GHz, RX @1.5 m
+  (= responder height)**. Table 10 (read directly):
+  | foliage | α (=n) | σ (dB) |
+  |---|---|---|
+  | April (bare, NDVI 0.19) | 2.27 | 7.21 |
+  | May (growing) | 3.28 | 8.21 |
+  | June (dense canopy, NDVI 0.80) | 4.23 | 8.97 |
+  This is the **first measured vegetation shadowing σ** in the whole thread — retiring the "σ is an assumption"
+  caveat. σ runs **7.2–9.0 dB**, rising with foliage density; n runs **2.3 → 4.2**.
+- **Corroboration** (from the same document set): Olasupo 2016 (IEEE TAP, 2.4 GHz natural grass, n≈2.9–4),
+  Klaina 2018 (Sensors, 2.4 GHz near-ground, obstructed slopes bracket 3), Boonlom et al. 2026 (Sensors, 923 MHz
+  LoRa — **forest n=3.22**, LOS 2.31, ~25 dB vegetation excess loss), Barrios-Ulloa et al. 2022 (Sensors, review
+  of WSN propagation in vegetated environments — vegetated models carry high error).
+- **Convergent grounded picture:** vegetation n ≈ 2.3 (light) → 3.3 (moderate) → 4.2 (dense canopy); σ ≈ 7–9 dB
+  rising with density. The single-slope MODERATE point is **n≈3.0, σ≈8**.
+- **Code action (done, v0.3.2):** WILDLAND **σ 7.0 → 8.0** (n=3.0 kept); provenance rewritten to cite the measured
+  campaigns (σ no longer "assumption"), with the density gradient documented in-code so an operator/dev can pick
+  light/moderate/dense. Fractional range error ±54% → **±61%** (measured veg σ is *higher* than the earlier
+  assumption — more honest bars). Python-verified; wire tests still 6/6.
+- **Still `indicative`, honestly:** the σ source is a **3.75 GHz vineyard** (not a 2.4 GHz forest), and it's a
+  single-slope fit over 0.2–104 m. So bench-calibrate on the actual XIAO boards near the ground, and a
+  **density-parameterized or two-slope {n1, n2, breakpoint, σ}** wildland model remains the eventual upgrade.
+
+**Thread resolution:** after 8 passes, the path-loss numbers are now grounded in *read* primary sources
+(measured vegetation LNS for σ; four corroborating campaigns for n), with every earlier mis-citation corrected.
+The preset is still labelled `indicative` because the exact-match (2.4 GHz forest, on-hardware) measurement is
+the bench test — but it is no longer resting on any unread or mis-attributed citation.
   - When convenient, bench-measure the duty-cycled ESP-NOW-from-light-sleep average (the one open 5.0 number).

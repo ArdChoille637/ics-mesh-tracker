@@ -4,6 +4,21 @@ Iteration history for the ICS Mesh Tracker prototype. All dates 2026-07-03 (buil
 over one intensive session). Versions are development milestones, not releases —
 nothing here has run on real hardware yet (see each entry's "Verified" line).
 
+## v0.3.2 — Wildland σ grounded in measured vegetation LNS
+
+- User supplied primary-source PDFs, letting the wildland `{n, σ}` finally be
+  set from **measured** data instead of assumption. WILDLAND **σ 7.0→8.0 dB**
+  (n=3.0 unchanged); σ is no longer flagged as an assumption. Grounding: Schneider
+  et al. 2026 (Future Internet, 3.75 GHz vineyard LNS at 1.5 m RX = responder
+  height) reports α/σ by foliage density = 2.27/7.21 (bare), 3.28/8.21 (growing),
+  4.23/8.97 (dense canopy); corroborated by Olasupo 2016 (IEEE TAP, 2.4 GHz grass
+  n≈2.9–4), Klaina 2018 (Sensors, 2.4 GHz near-ground), Boonlom 2026 (Sensors,
+  923 MHz LoRa forest n=3.22), and Barrios-Ulloa 2022 (Sensors review). Fractional
+  range error ±54%→±61% (measured vegetation σ is higher than the earlier assumed
+  value — more honest error bars). Still `indicative` (σ source is 3.75 GHz, not
+  2.4 GHz forest); a density-parameterized or two-slope model is the next upgrade.
+  See `docs/research-log.md` Pass 8.
+
 ## v0.3.1 — Wildland path-loss preset corrected
 
 - `fusion.py` WILDLAND preset **n 2.7→3.0, σ 8.7→7.0** (still `indicative`). The

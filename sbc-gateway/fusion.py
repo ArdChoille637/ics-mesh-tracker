@@ -74,10 +74,15 @@ class EnvPreset:
 #     pre-breakpoint zone, rising to n~3.5-4 once the ground/vegetation pierces
 #     the first Fresnel zone (breakpoint ~50-110 m for ~1.3 m antennas). A single
 #     LOW n (~2.0) therefore UNDER-predicts loss and inflates distances past the
-#     breakpoint — so the single-slope planning value is n~3.0, sigma~6-8 dB
-#     (per near-ground vegetation campaigns: Olasupo 2016 IEEE TAP; Klaina 2018
-#     Sensors; and the two-slope WSN lit). Not from Wang 2012 (that's open
-#     grassland LOS, not forest).
+#     breakpoint — so the single-slope planning value is n~3.0.
+#   - PROVENANCE (be honest): n~3.0 is supported by near-ground 2.4 GHz grass
+#     measurement campaigns — Olasupo 2016 (IEEE TAP, natural short/tall grass;
+#     grass exponents ~2.9-4) and Klaina 2018 (MDPI Sensors, three-slope, its
+#     obstructed slopes bracket 3.0). NOT from Wang 2012 (open grassland LOS).
+#     BUT sigma~7 dB is an ASSUMPTION from the general near-ground shadowing band
+#     (~4-8 dB), NOT quoted from those papers: Klaina reports no lognormal sigma
+#     at all, and Olasupo's sigma tables were unread (paywalled). So sigma is the
+#     least-grounded number here — bench-measure it first.
 # Bench-calibrate every preset on the actual boards + mounting before trusting
 # distances (walk to 1/2/4/8 m per environment); a two-slope wildland model is
 # the eventual upgrade.

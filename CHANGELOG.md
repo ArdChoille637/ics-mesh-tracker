@@ -15,6 +15,12 @@ nothing here has run on real hardware yet (see each entry's "Verified" line).
   slope value is n≈3.0/σ≈6–8 dB (near-ground vegetation campaigns). Fractional
   range error ±74%→±54%. See `docs/research-log.md` Pass 6. Still bench-calibrate
   before trusting; two-slope model is the eventual upgrade.
+  - *Provenance correction (Pass 7):* n≈3.0 is supported by Olasupo 2016 (IEEE
+    TAP) + Klaina 2018 (MDPI Sensors), both verified as genuine near-ground
+    2.4 GHz grass campaigns. But **σ≈7 dB is an assumption**, not from those
+    papers — Klaina reports no shadowing σ and Olasupo's σ tables were unread —
+    so σ is the least-grounded value and must be bench-measured. Preset values
+    unchanged; only the sourcing comment was corrected.
 
 ## v0.3.0 — Research-grounded positioning rewrite
 

@@ -304,4 +304,38 @@ to a *better-grounded* value, still `indicative`.
   ground vegetation campaign with an explicit n **and** σ — Olasupo 2016 (IEEE TAP, natural grass 2.4 GHz),
   Klaina 2018 (Sensors), or Alsayyari 2018 — ideally as a **two-slope {n1, n2, breakpoint, σ}** rather than one
   exponent.
+
+---
+
+## Pass 7 — convergence + Code audits its own citations (2026-07-04)
+
+Science re-issued 1.1 a third time — this one **fully converges** with Pass 6: it adopted n≈3.0/σ≈7, explicitly
+reversed its "lower n" framing ("the opposite of my earlier framing"), and withdrew the Wang 2012 / 1.78 numbers.
+No new claims. **But Pass 6 had put the Olasupo 2016 / Klaina 2018 citations into the shipped code on the
+recommendation of a verify agent that couldn't open the PDFs — so Code verified its own citations** (same
+standard we hold Science to). 2-agent check:
+
+- **Olasupo 2016 — correctly attributed, on-target (PLAUSIBLE).** Real: Olasupo, Otero, Olasupo & Kostanic,
+  "Empirical Path Loss Models for WSN Deployments in Short and Tall Natural Grass Environments," **IEEE TAP 64(9),
+  2016** (DOI 10.1109/TAP.2016.2583507). Genuinely a near-ground 2.4 GHz over-grass measurement campaign — *not*
+  an ITU-P.833-style wrong-paper error. Its grass exponents (~2.9–4) support n≈3.0. σ tables paywalled/unread.
+- **Klaina 2018 — correctly attributed, on-target, but does NOT support σ (PLAUSIBLE).** Real: Klaina, Vázquez
+  Alejos, Aghzout & Falcone, "Narrowband Characterization of Near-Ground Radio Channel… at 5G-IoT Bands,"
+  **Sensors 18(8):2428, 2018.** Near-ground 2.4 GHz over soil/short-grass/tall-grass, three-slope, Fresnel-
+  motivated; its obstructed slopes bracket 3.0 (tall-grass slope literally 3.0), so n≈3.0 is defensible. **KEY:
+  it reports NO lognormal shadowing σ** — it's a deterministic fit. So the preset's **σ≈7 dB is not sourced from
+  it.**
+- **Code action (done, pushed):** the n≈3.0 stays (well-supported); the **σ≈7 dB is now labelled in-code + in
+  CHANGELOG as an ASSUMPTION** from the general near-ground shadowing band (~4–8 dB), *not* attributed to those
+  papers — Klaina has no σ, Olasupo's σ unread. σ is the least-grounded value; bench-measure it first. Values
+  unchanged (comment/provenance-only fix, no new tag).
+
+### Path-loss thread scorecard (Passes 5–7)
+
+Four citation issues surfaced in this one sub-topic: ITU-R P.833 **refuted**, "Cabral" → **Pereira** (author),
+Wang 2012 **wrong scenario**, and σ≈7 **not sourced** from the papers it was attributed to. The *values* have
+converged to a defensible `indicative` preset (WILDLAND n=3.0/σ=7, STRUCTURAL 4.5/8.1, INDUSTRIAL 5.85/4.0), but
+the sourcing needed heavy correction throughout — **the honest bottom line is that the wildland {n, σ} is
+bench-calibration territory, not a literature-settled fact.** Every wrong attribution was caught by an
+independent pass, including Code's own.
   - When convenient, bench-measure the duty-cycled ESP-NOW-from-light-sleep average (the one open 5.0 number).

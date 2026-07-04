@@ -398,4 +398,38 @@ and INDUSTRIAL 5.85/4.0 (`measured`) — all selectable via `set_environment()`.
    now carry the σ it needs (`fractional_range_sigma()`).
 
 These form one coherent "RSSI honesty" fusion pass; best designed together rather than piecemeal.
+
+---
+
+## Pass 10 — item 1.7 (RSSI filter/estimator/freshness): verified + implemented (2026-07-04)
+
+Science answered Code's Pass-9 estimator question and delivered the full 1.7 treatment. Code reproduced the
+load-bearing simulation, caught a cross-cutting architecture issue, and implemented the correct parts (v0.4.0).
+
+- **Estimator (verified) — NOT raw MAX.** Code's MAX instinct was "half right, half dangerous." Science
+  simulated two coexisting processes — one-sided body shadow (0–20 dB, slow) + symmetric fast fading (±4 dB,
+  fast) — and found: mean/median biased low (distance over-estimate), **raw MAX biased HIGH (+7.8 dB → distance
+  under-estimate → a downed responder looks closer/safer, the dangerous direction)**, a high percentile
+  (75–90th) near-unbiased. **Code independently reproduced it** (different model params → different digits, but
+  the *ranking and signs held*: MAX dangerously optimistic, mean/median pessimistic, a high percentile near
+  zero). Recommendation adopted: **median pre-filter (reject impulsive multipath) → ~75th percentile**; exact
+  percentile is model/bench-dependent (Science 75, Code ~90) so it's tunable.
+- **Cross-cutting catch (Code):** the two-stage estimator assumes a fast (ms) sampling stage, but at the **~2 s
+  beacon cadence** a node gets ~1 RSSI/neighbor/2 s — so a node-side median-of-5 spans ~10 s (orientation scale,
+  injecting the −3 dB bias it was meant to avoid), and the SBC has too few samples for a real percentile in a
+  4 s window. **1.7's estimator is sample-rate-limited and couples to the Tier-5 beacon-rate/power decision.**
+- **Also verified (reproduced):** per-sample 6 dB swing → 1.58× distance error at n=3.0; speed→freshness (1.4 m/s
+  → 2.1 s for a 3 m floor); window tension (45°/s → 4 s to span 180°; 1.4 m/s × 4 s = 5.6 m translation blur).
+- **Implemented (v0.4.0, `fusion.py`, Python-verified):** (1) windowed high-percentile estimator (median-pre-
+  filtered, default 75th) replacing latest-sample-wins; (2) speed-adaptive freshness (~2 s moving → ~8 s still,
+  from PDR step-rate); (3) bidirectional edge averaging (per-direction windows, averaged when both exist).
+- **NOT implemented (flagged @science):** the node-side median-of-N (would inject the −3 dB bias at 2 s cadence);
+  the motion-gated window-length switch (leans on the same beacon-rate question). These wait on the beacon-rate
+  decision.
+
+**Handoff:** `@science` — the beacon rate is now the pivotal open variable for 1.7 (and it ties to Tier-5 power):
+what RSSI sample rate does a robust orientation percentile actually need, and can the node measure RSSI on all
+received packets (not just 2 s beacons) to get it without a power hit? `@code` — remaining RSSI-half:
+per-unit/per-mounting `TX_POWER_AT_1M` offset mechanism (4.3), and σ-into-solver + confidence rings / topology
+fallback (0.2, the larger fusion redesign).
   - When convenient, bench-measure the duty-cycled ESP-NOW-from-light-sleep average (the one open 5.0 number).

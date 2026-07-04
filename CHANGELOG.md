@@ -4,6 +4,36 @@ Iteration history for the ICS Mesh Tracker prototype. All dates 2026-07-03 (buil
 over one intensive session). Versions are development milestones, not releases —
 nothing here has run on real hardware yet (see each entry's "Verified" line).
 
+## v0.4.0 — RSSI hygiene: windowed percentile estimator, speed-adaptive freshness, bidirectional edges
+
+Implements the correct-regardless-of-sampling parts of research item 1.7 (RSSI
+fast-fading / filtering / freshness), in `sbc-gateway/fusion.py`:
+
+- **Windowed high-percentile estimator** replaces latest-sample-wins per edge.
+  The old single-sample approach aliased the 10–20 dB body-shadow swing to a
+  random distance. The new estimator takes a **~75th percentile** (bench-tunable
+  75–90) of a median-pre-filtered per-edge window: mean/median sit mid-shadow
+  (distance over-estimate), raw **MAX** chases symmetric fast-fading peaks
+  (distance *under*-estimate — a downed responder would look closer/safer, the
+  dangerous direction), and a high percentile recovers the near-LoS side. Both
+  Science's simulation and an independent Code reproduction confirm the ranking.
+- **Speed-adaptive freshness** replaces the fixed 15 s max-age (a 21 m stale
+  error at 1.4 m/s): per-edge window is now ~2 s when the observer moves briskly,
+  relaxing to ~8 s when slow/still (derived from PDR step-rate), bounding stale-
+  edge displacement under ~3 m.
+- **Bidirectional edge averaging**: RSSI(A→B) and RSSI(B→A) are kept separately
+  and averaged when both exist (recovers the reciprocal path, halves per-unit
+  TX/RX offset error); one-way edges are used as-is (lower confidence).
+- **NOT done (flagged to Science):** the proposed node-side median-of-N. At the
+  ~2 s beacon cadence a node gets ~1 RSSI sample / neighbor / 2 s, so a node-side
+  median-of-5 would span ~10 s (orientation scale) and inject the −3 dB median
+  bias it was meant to avoid — and leaves too few samples for the SBC percentile.
+  Item 1.7's two-stage estimator needs a faster beacon rate than the current
+  design provides, coupling it to the Tier-5 beacon-rate/power decision.
+- **Verified:** estimator behavior, bidirectional solve (4.94 m vs 5.0), speed-
+  adaptive clamping, JSON snapshot, wire tests 6/6. See `docs/research-log.md`
+  Pass 10. Exact percentile + the beacon-rate coupling remain bench items.
+
 ## v0.3.2 — Wildland σ grounded in measured vegetation LNS
 
 - User supplied primary-source PDFs, letting the wildland `{n, σ}` finally be

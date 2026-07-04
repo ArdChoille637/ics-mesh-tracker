@@ -28,7 +28,9 @@ from __future__ import annotations
 
 import logging
 import math
+import statistics
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -105,12 +107,55 @@ ENV_PRESETS: dict[str, EnvPreset] = {
 }
 DEFAULT_ENV = "WILDLAND"   # primary use case for this project (wildfire/SAR)
 
-RSSI_OBSERVATION_MAX_AGE_S = 15.0
 FUSION_CORRECTION_WEIGHT = 0.35  # how strongly each RSSI solve pulls fused position toward it
+
+# --- RSSI hygiene (item 1.7; see docs/research-log.md Pass 10) ---
+# The old design used the single most-recent RSSI per edge, which aliases the
+# 10-20 dB body-shadow swing to a random distance. Instead, keep a short
+# per-direction window and estimate the near-LoS RSSI with a HIGH PERCENTILE:
+#  - mean/median sit in the middle of the one-sided shadow swing -> distance
+#    over-estimate (pessimistic);
+#  - raw MAX chases the *symmetric* fast-fading peaks -> distance UNDER-estimate,
+#    i.e. a downed responder looks closer/safer (the dangerous direction);
+#  - a ~75th-90th percentile recovers the least-shadowed side without chasing
+#    fading. 75 is Science's simulated near-unbiased point; Code's reproduction
+#    put it nearer 90 — model-dependent, so it's BENCH-tunable.
+# CAVEAT: at the current ~2 s beacon cadence a window holds only ~1-4 samples,
+# so this estimator is sample-rate-limited until beaconing is faster (couples
+# to the Tier-5 beacon-rate/power decision). It degrades gracefully to the
+# available samples and is forward-compatible with a higher beacon rate.
+RSSI_PERCENTILE = 75.0
+RSSI_WINDOW_MAX_S = 8.0            # per-edge sample window cap (still/slow responders)
+RSSI_WINDOW_MIN_S = 2.0           # window floor (brisk movement)
+STALE_DISPLACEMENT_FLOOR_M = 3.0  # keep stale-edge displacement under ~this (speed-adaptive freshness)
 
 
 def rssi_to_distance_m(rssi_dbm: float, preset: EnvPreset) -> float:
     return 10 ** ((preset.tx_power_1m_dbm - rssi_dbm) / (10 * preset.path_loss_n))
+
+
+def _percentile(sorted_xs: list[float], pct: float) -> float:
+    """Linear-interpolated percentile of an already-sorted list (numpy-free,
+    so it stays cheap in the per-edge hot path)."""
+    if len(sorted_xs) == 1:
+        return sorted_xs[0]
+    rank = (pct / 100.0) * (len(sorted_xs) - 1)
+    lo = math.floor(rank)
+    hi = math.ceil(rank)
+    return sorted_xs[lo] + (sorted_xs[hi] - sorted_xs[lo]) * (rank - lo)
+
+
+def robust_rssi(samples: list[float]) -> float:
+    """Near-LoS RSSI estimate for one directional edge window: reject impulsive
+    multipath outliers with a light median pre-filter, then take a high
+    percentile (item 1.7). Falls back cleanly for tiny windows."""
+    if len(samples) >= 5:
+        s = sorted(samples)
+        # median-of-3 smoothing to blunt impulsive fast-fading spikes a raw
+        # percentile would otherwise include
+        sm = [statistics.median(s[max(0, i - 1):i + 2]) for i in range(len(s))]
+        return _percentile(sorted(sm), RSSI_PERCENTILE)
+    return _percentile(sorted(samples), RSSI_PERCENTILE)
 
 
 @dataclass
@@ -123,6 +168,8 @@ class NodeFusionState:
     par_status: ParStatus = ParStatus.OK
     battery_pct: int = 100
     imu_present: bool = False
+    speed_mps: float = 0.0     # from PDR steps/report; drives speed-adaptive RSSI freshness (item 1.7)
+    stationary: bool = False   # node's stillness flag; still windows are the best orientation-averaging windows
     last_telemetry_s: float = field(default_factory=time.time)
     is_anchor: bool = False  # team lead == anchor at (0,0)
 
@@ -132,7 +179,8 @@ class NodeFusionState:
         old displacement-vector integration (which relied on the diverging
         on-node double integration — see docs/research-log.md 0.1). Heading
         is the node's own absolute value in its arbitrary frame, so we set
-        (not accumulate) it each report."""
+        (not accumulate) it each report. (last_telemetry_s / speed are owned by
+        ingest_telemetry, which needs the pre-update timestamp to compute dt.)"""
         self.heading_rad = heading_mrad / 1000.0
         self.heading_conf = heading_conf
         if self.is_anchor:
@@ -140,14 +188,16 @@ class NodeFusionState:
         distance_m = step_count * (stride_mm / 1000.0)
         self.x_m += distance_m * math.cos(self.heading_rad)
         self.y_m += distance_m * math.sin(self.heading_rad)
-        self.last_telemetry_s = time.time()
 
 
 class NetworkFusion:
     def __init__(self, environment: str = DEFAULT_ENV):
         self.nodes: dict[int, NodeFusionState] = {}
-        # (a, b) -> (rssi_dbm, observed_at_s), a < b, most recent wins
-        self._rssi_edges: dict[tuple[int, int], tuple[float, float]] = {}
+        # DIRECTIONAL windows: (observer, neighbor) -> deque of (rssi_dbm, ts).
+        # Kept per direction (not collapsed to a sorted pair) so bidirectional
+        # edges can be averaged — RSSI(A->B) != RSSI(B->A) by a few dB from TX
+        # power / antenna-pattern / per-unit variation (item 1.7).
+        self._rssi_samples: dict[tuple[int, int], deque] = {}
         self._anchor_node_id: Optional[int] = None
         self._preset = ENV_PRESETS[environment]
         log.info("environment preset: %s (n=%.2f sigma=%.1f dB, %s)",
@@ -184,23 +234,56 @@ class NetworkFusion:
 
     def ingest_telemetry(self, node_id: int, t: TelemetryPayload):
         state = self._ensure_node(node_id)
+        now = time.time()
+        dt = max(0.1, now - state.last_telemetry_s)   # report interval (~1 s)
+        state.speed_mps = (t.step_count * (t.stride_mm / 1000.0)) / dt
+        state.stationary = t.stationary
         state.predict(t.step_count, t.stride_mm, t.heading_mrad, t.heading_conf)
         state.par_status = t.par_status
         state.battery_pct = t.battery_pct
         state.imu_present = t.imu_present
-        state.last_telemetry_s = time.time()
+        state.last_telemetry_s = now
 
-        now = time.time()
         for sample in t.rssi:
-            a, b = sorted((node_id, sample.neighbor_node_id))
-            self._rssi_edges[(a, b)] = (float(sample.rssi_dbm), now)
+            key = (node_id, sample.neighbor_node_id)   # directional: node_id observed neighbor
+            dq = self._rssi_samples.get(key)
+            if dq is None:
+                dq = self._rssi_samples[key] = deque(maxlen=64)
+            dq.append((float(sample.rssi_dbm), now))
+
+    def _edge_max_age_s(self, observer_speed_mps: float) -> float:
+        """Speed-adaptive freshness: a 15 s edge at 1.4 m/s is a ~21 m stale
+        error. Bound stale-edge displacement under ~STALE_DISPLACEMENT_FLOOR_M —
+        ~2 s when moving briskly, relaxing to ~8 s when slow/still (item 1.7)."""
+        if observer_speed_mps <= 0.05:
+            return RSSI_WINDOW_MAX_S
+        return min(RSSI_WINDOW_MAX_S, max(RSSI_WINDOW_MIN_S,
+                                          STALE_DISPLACEMENT_FLOOR_M / observer_speed_mps))
 
     def _fresh_edges(self) -> list[tuple[int, int, float]]:
+        """One distance per unordered pair, from the robust high-percentile of
+        each direction's speed-fresh RSSI window, bidirectionally averaged."""
         now = time.time()
+        pair_dir_rssi: dict[tuple[int, int], list[float]] = {}
+        for (obs, nbr), dq in self._rssi_samples.items():
+            observer = self.nodes.get(obs)
+            max_age = self._edge_max_age_s(observer.speed_mps if observer else 0.0)
+            # prune anything older than the cap (bounded memory), then take the
+            # speed-adaptive fresh window
+            while dq and now - dq[0][1] > RSSI_WINDOW_MAX_S:
+                dq.popleft()
+            fresh = [r for (r, ts) in dq if now - ts <= max_age]
+            if not fresh:
+                continue
+            key = (obs, nbr) if obs < nbr else (nbr, obs)
+            pair_dir_rssi.setdefault(key, []).append(robust_rssi(fresh))
         out = []
-        for (a, b), (rssi, ts) in self._rssi_edges.items():
-            if now - ts <= RSSI_OBSERVATION_MAX_AGE_S:
-                out.append((a, b, rssi_to_distance_m(rssi, self._preset)))
+        for (a, b), dir_rssis in pair_dir_rssi.items():
+            # average the two directional estimates when both exist (recovers
+            # the reciprocal path, halves the per-unit TX/RX offset error); a
+            # one-way edge is used as-is (lower confidence — see item 4.3).
+            avg_rssi = sum(dir_rssis) / len(dir_rssis)
+            out.append((a, b, rssi_to_distance_m(avg_rssi, self._preset)))
         return out
 
     def recompute_multilateration(self):

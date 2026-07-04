@@ -432,4 +432,48 @@ what RSSI sample rate does a robust orientation percentile actually need, and ca
 received packets (not just 2 s beacons) to get it without a power hit? `@code` — remaining RSSI-half:
 per-unit/per-mounting `TX_POWER_AT_1M` offset mechanism (4.3), and σ-into-solver + confidence rings / topology
 fallback (0.2, the larger fusion redesign).
+
+---
+
+## Pass 11 — item 1.7b (RSSI sample rate for the percentile) (2026-07-04)
+
+Science answered Code's Pass-10 beacon-cadence catch with a quantitative rate analysis. Code reproduced the
+arithmetic and checked the firmware. **This pass is analysis + a CONOPS resolution, not a discrete feature — no
+standalone code shipped; its actions couple to 0.2 and a firmware follow-up.**
+
+- **Rate requirement (reproduced exactly):** a robust orientation percentile needs the **max** of two rates —
+  (1) an **orientation-coverage floor ~2.5 Hz** (10 looks across 180° at ~45°/s yaw), and (2) an **order-statistic
+  tail** N·(1−p) ≳ 5 → **N≥20/window for the 75th**, N≥50 for the 90th. With motion-gated windows: **moving 2 s
+  → ~10 Hz (75th) / ~25 Hz (90th); still 8 s → ~2.5 Hz** (coverage-limited). The 0.5 Hz beacon cadence is short
+  by 5× (still) to 50× (moving-90th) — **Code's starvation diagnosis is quantitatively confirmed.** *(Minor:
+  Science's "10–50×" undersells the still end, which is 5×; the moving end 20–50× is right.)*
+- **Key reframe (correct):** RSSI rate is **per-LINK**, not aggregate-mesh — the A→B percentile is fed only when
+  A transmits and B overhears, so a busy mesh doesn't help a quiet link.
+- **Passive harvest is free — and already half-done.** ESP32 exposes `rx_ctrl.rssi` on *every* received frame;
+  **the firmware already captures it on all frames** (`espnow_mesh.cpp` `staticOnRecvRssi` → `neighbor_rssi_`,
+  line 196/210), not just beacons. **The gap is downstream:** it's stored latest-wins and only the latest is
+  reported at 1 Hz telemetry, so the harvest is thrown away before it reaches the SBC. Exploiting it needs
+  **on-node windowed RSSI aggregation + reporting** (a firmware + wire-format change, and traffic-dependent —
+  helps only on chatty links). *Not built this pass.*
+- **Resolution (elegant, sound):** the demand and supply curves run opposite, so the **motion-gate already in
+  v0.4.0 also resolves the rate/power conflict** — STILL needs only ~2.5 Hz (passive-harvest-achievable, and
+  zero translation blur = best window) so trust the RSSI coordinate; MOVING needs 10–25 Hz that a quiet link
+  can't supply, but PDR carries position then and coordinate RSSI is least critical (0.2 topology). **Do NOT
+  raise beacon cadence or go promiscuous** — both spend the Tier-5 budget the energy analysis said isn't there.
+- **Honest bottom line:** at the current 1 Hz telemetry / ~0.5 Hz per-link fresh RSSI, the coordinate percentile
+  is **fundamentally under-sampled** → **topology-grade is the honest default**, coordinates only when still with
+  enough turning. This *is* the 0.2 conclusion, now quantified.
+
+### Handoff
+
+- `@code` (the pieces 1.7b hands off, both coupling to bigger work — not forced this pass):
+  1. **0.2 redesign** should consume 1.7b: gate each edge on **achieved sample count + yaw-coverage** (a link
+     with 50 samples all at one heading is still not a valid percentile — coverage, not count, is the real gate),
+     and render coordinate-grade vs topology-grade per edge (confidence rings / link-graph fallback).
+  2. **Firmware follow-up:** on-node windowed RSSI reporting to actually exploit the already-captured all-frame
+     RSSI (traffic-dependent; needs a wire-format tweak).
+  3. Still open: per-unit/per-mounting `TX_POWER_AT_1M` offset (4.3).
+- `@science`: the **straight-line-advance falsification** is the sharp open risk — a responder who moves without
+  turning gets no orientation diversity at *any* rate, so the coverage gate (gyro yaw-span over the window), not
+  sample count, must catch it. Worth a bench trace (per-link RSSI + yaw, straight advance vs turning search).
   - When convenient, bench-measure the duty-cycled ESP-NOW-from-light-sleep average (the one open 5.0 number).

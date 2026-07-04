@@ -103,12 +103,13 @@ async def broadcast_loop():
         with fusion_lock:
             fusion.recompute_multilateration()
             snapshot = fusion.snapshot()
+            env = fusion.environment_summary()
         dead = []
         with _ws_clients_lock:
             clients = list(_ws_clients)
         for ws in clients:
             try:
-                await ws.send_json({"nodes": snapshot})
+                await ws.send_json({"nodes": snapshot, "env": env})
             except Exception:
                 dead.append(ws)
         if dead:

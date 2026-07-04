@@ -401,6 +401,55 @@ These form one coherent "RSSI honesty" fusion pass; best designed together rathe
 
 ---
 
+## Pass 12 — item 0.2 fusion redesign: design → implement → review (2026-07-04, v0.5.0)
+
+The big fusion change that consumes items 1.1/1.7/0.2. Run as a proper multi-phase effort under ultracode:
+a **design judge-panel** (3 architects with different priors — statistical-rigor / pragmatic / safety — →
+synthesized spec), inline **implementation**, then an **adversarial review** (3 lenses → verify → fix).
+
+- **Design panel earned its keep** by surfacing three non-obvious pitfalls before any code: the **pinv-zero-
+  tangential trap** (reading bearing variance from the Jacobian gives ~0 for range-only geometry — a confident
+  dot where bearing is *least* known), the **anchor soft-pin self-contradiction** (old code zeroed the anchor
+  then added penalty rows on the zeroed values), and the **D_FLOOR NaN-poison** (two coincident nodes → log10(0)).
+  Locked design: whitened dB-space residuals + hard-eliminated anchor + `soft_l1`; **closed-form polar
+  covariance** (radial from preset σ+edge-count, tangential from GDOP `σ_t~σ_r/sin(sep)`, never the Jacobian);
+  Procrustes flip detect/repair/align; per-node coordinate/topology gating that fails safe.
+- **Implemented** in `fusion.py` (full rewrite of the solve/confidence/gating path) + snapshot/env fields +
+  `static/map.html` rendering (ellipses, topology rings, grade coloring, TOPOLOGY-MODE banner) + server broadcast.
+- **Adversarial review caught 5 REAL bugs, all fixed + regression-tested:**
+  1. **CRITICAL** — an **off-air node lingered as a confident coordinate dot** (the staleness gate lived inside
+     the per-frame grader, unreachable once the node left the edge set; the ~8 s edge-freshness < 15 s stale
+     threshold meant it *never* aged out). This is the exact false-pinpoint the redesign exists to forbid — and
+     my own geometry tests missed it. Fixed with an `_age_out` sweep over ALL nodes every cycle.
+  2. **HIGH** — re-anchor didn't zero the new anchor's x/y → team lead drawn off-origin. Fixed in `set_anchor`.
+  3. **HIGH** — `n_indep` counted anti-parallel (collinear) edges as 2 independent → a collinear node graded
+     coordinate with an unconstrained cross-line axis. Fixed: cluster by **line direction (mod π)**.
+  4. **HIGH** — the flip guard's collinearity check used two arbitrary nodes and **skipped all alignment** on
+     that branch, blending the solver's arbitrary rotation and **shrinking range-from-anchor** (a false
+     "closer/safer" reading). Fixed: whole-cloud singular-value chirality check; **always** apply the proper
+     rotation, gate only the reflection decision.
+  5. **LOW** — `pos_confidence` used a bearing proxy that disagreed with the ellipse. Fixed to use the same GDOP
+     term. Also **tuned** the tangential model from the panel's mean-resultant to best-pair `sin(sep)` after a
+     test showed corner nodes were over-graded topology (a real GDOP correction).
+- **Verified:** `test_fusion.py` — 9 tests incl. all 5 review regressions (off-air→stale, unobserved→topology,
+  re-anchor-zeroes, collinear→topology, flip preserves range, single-edge tangential smear, rigid-K4 recovers
+  distances to 0.30 m + coordinate-grade) — plus wire tests 6/6, map data-contract + JS syntax. **Not verified:**
+  the map render live (preview server wouldn't come up here); firmware unaffected (SBC-only change).
+- **Honest state:** all gating thresholds are `indicative`/bench-tunable. At the current ~0.5 Hz per-link RSSI
+  (Pass 11), most nodes will legitimately grade **topology** on real hardware until the team moves/turns enough
+  to trilaterate — that is correct-by-design (the honest default), not a regression.
+
+### Remaining after Pass 12
+
+- `@code`: per-unit/per-mounting `TX_POWER_AT_1M` offset mechanism (4.3) is the last RSSI-half item; the
+  on-node windowed-RSSI-reporting firmware follow-up (1.7b) to exploit the already-captured all-frame RSSI.
+- **Broader project:** flash/compile the firmware on real hardware; bench-calibrate every `indicative` constant
+  (PDR stride/stillness, path-loss presets, TX offsets, the 0.2 gating thresholds); build the phone app.
+- `@science`: the straight-line-advance yaw-coverage falsification (1.7b); Tier 2 (fusion filter / flip
+  ambiguity theory) and 0.4 (radio-choice / prior-art) remain open if the collaboration continues.
+
+---
+
 ## Pass 10 — item 1.7 (RSSI filter/estimator/freshness): verified + implemented (2026-07-04)
 
 Science answered Code's Pass-9 estimator question and delivered the full 1.7 treatment. Code reproduced the

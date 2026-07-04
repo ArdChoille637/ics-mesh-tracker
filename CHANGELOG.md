@@ -4,6 +4,47 @@ Iteration history for the ICS Mesh Tracker prototype. All dates 2026-07-03 (buil
 over one intensive session). Versions are development milestones, not releases —
 nothing here has run on real hardware yet (see each entry's "Verified" line).
 
+## v0.5.0 — Honest fusion (item 0.2): dB-space solve, confidence ellipses, topology grading
+
+The RSSI solve was redesigned to be honest about what range-only body-worn RSSI
+can and can't know (research item 0.2). Designed by a judge panel, implemented,
+then adversarially reviewed — the review caught 5 real bugs (incl. a critical
+lifecycle one), all fixed with regression tests. In `sbc-gateway/fusion.py`:
+
+- **Whitened dB-space residuals** `r = (10n/σ)·log10(d_model/d_meas)` replace the
+  metric residual. Shadowing is log-normal (Gaussian in dB), so this is
+  homoscedastic — far edges no longer dominate near ones — with no hand-coded
+  distance weight. Anchor gauge is hard-eliminated (only non-anchor coords are
+  free); robust `soft_l1` loss down-weights NLOS/multipath edges.
+- **Per-node confidence ellipse.** Closed-form polar covariance: radial from the
+  preset σ + edge count, tangential from range-only GDOP (`σ_t ~ σ_r/sin(sep)`) —
+  deliberately NOT from the solver Jacobian (which reports ~0 tangential variance
+  for range-only geometry, a confident dot exactly where bearing is least known).
+  So a node the geometry can't fix in bearing renders as a long tangential smear,
+  not a false pinpoint.
+- **Coordinate- vs topology-grade** per node, failing SAFE to topology (a range
+  ring around the anchor, bearing left explicitly ambiguous) whenever a node is
+  under-constrained (rigidity / collinear geometry), under-sampled, moving,
+  reflection-unstable, inconsistent, or off-air. The overriding rule: never show
+  a possibly-downed responder as more precisely located than the data supports.
+- **Flip guard**: Procrustes detect/repair/align of each solve onto the previous
+  frame (un-mirrors reflections; removes the arbitrary gauge rotation before the
+  blend so ranges can't shrink), with a flip-instability backstop that forces the
+  whole map to topology when chronically reflection-ambiguous.
+- **Edge weighting** inflates one-way and sample-starved edges' σ; **bidirectional
+  averaging** already recovers the reciprocal path.
+- **Snapshot** gains per-node `grade`, `pos_confidence`, `ellipse{a_m,b_m,
+  theta_deg,bearing_ambiguous}`, `ring_m`, `range_from_anchor_m`, `range_sigma_m`,
+  `n_edges`, `n_indep_edges`, `best_n_samp`, `yaw_cov`; `environment_summary`
+  gains `flip_unstable`, `graph_rigid`, and coordinate/topology census.
+- **Map (`static/map.html`)** renders it: located nodes as dots + 1σ ellipses,
+  topology/stale as dashed range rings, grade-colored table, and a "TOPOLOGY MODE"
+  banner when the mesh can't be located.
+- **Verified:** `test_fusion.py` (9 tests incl. the review regressions) + wire
+  tests 6/6; map data-contract + JS syntax checked. Constants are bench-tunable
+  (`indicative`); the map render wasn't visually confirmed in this environment.
+  See `docs/research-log.md` Pass 12.
+
 ## v0.4.0 — RSSI hygiene: windowed percentile estimator, speed-adaptive freshness, bidirectional edges
 
 Implements the correct-regardless-of-sampling parts of research item 1.7 (RSSI

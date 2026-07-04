@@ -19,19 +19,28 @@
   .status-EMERGENCY { color: #fb3; }
   .status-MAYDAY { color: #f44; font-weight: bold; }
   .status-OUT_OF_CONTACT { color: #888; }
-  #legend { position: absolute; bottom: 10px; left: 10px; font-size: 12px; color: #9ab; }
+  #legend { position: absolute; bottom: 10px; left: 10px; font-size: 12px; color: #9ab; max-width: 60%; }
+  #banner { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 13px;
+            padding: 6px 14px; border-radius: 4px; display: none; font-weight: bold; }
+  #banner.warn { display: block; background: #7a2; color: #061; }
+  #banner.crit { display: block; background: #b22; color: #fff; }
   .log-entry { font-size: 12px; border-bottom: 1px solid #222; padding: 4px 0; }
   .log-entry .meta { color: #789; }
+  .grade-coordinate { color: #6cf; }
+  .grade-topology { color: #ca6; }
+  .grade-stale { color: #888; }
+  .grade-anchor { color: #6d6; }
 </style>
 </head>
 <body>
   <div id="map-panel">
     <canvas id="map"></canvas>
-    <div id="legend">Grid: 1m per line · anchor (team lead) = center diamond · caution: relative RSSI positions, ±5-15m error</div>
+    <div id="banner"></div>
+    <div id="legend">Grid: 1m/line · ◆ anchor · ● located (dot + 1σ ellipse) · ◌ topology (range known, bearing not — dashed ring) · faded = stale. Relative RSSI; the ellipse IS the uncertainty.</div>
   </div>
   <div id="side-panel">
     <h2>Nodes</h2>
-    <table id="node-table"><thead><tr><th>Node</th><th>PAR</th><th>Batt</th><th>Age</th></tr></thead><tbody></tbody></table>
+    <table id="node-table"><thead><tr><th>Node</th><th>Grade</th><th>PAR</th><th>Age</th></tr></thead><tbody></tbody></table>
     <h2>ICS-214 Activity Log</h2>
     <div id="ics214-log"></div>
   </div>
@@ -40,6 +49,7 @@
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
 let latestNodes = [];
+let latestEnv = {};
 
 function resize() {
   canvas.width = canvas.clientWidth;
@@ -69,27 +79,65 @@ function draw() {
   for (const n of latestNodes) {
     const px = cx + n.x_m * METERS_TO_PX;
     const py = cy - n.y_m * METERS_TO_PX; // screen y grows downward; flip so +y is "north" on screen
-    const stale = n.age_s > 20;
+    const par = colors[n.par_status] || '#5af';
+    const el = n.ellipse || { a_m: 0, b_m: 0, theta_deg: 0, bearing_ambiguous: false };
 
-    ctx.beginPath();
     if (n.is_anchor) {
-      // diamond marker for the team lead / anchor node
+      ctx.beginPath();
       ctx.moveTo(px, py - 9); ctx.lineTo(px + 9, py); ctx.lineTo(px, py + 9); ctx.lineTo(px - 9, py);
       ctx.closePath();
-    } else {
-      ctx.arc(px, py, 7, 0, Math.PI * 2);
+      ctx.fillStyle = par; ctx.fill();
+      ctx.strokeStyle = '#111'; ctx.stroke();
+      label(px, py, n, '#ccc');
+      continue;
     }
-    ctx.fillStyle = colors[n.par_status] || '#5af';
-    ctx.globalAlpha = stale ? 0.35 : 1.0;
-    ctx.fill();
-    ctx.globalAlpha = 1.0;
-    ctx.strokeStyle = '#111';
-    ctx.stroke();
 
-    ctx.fillStyle = '#ccc';
-    ctx.font = '11px sans-serif';
-    ctx.fillText(`#${n.node_id}${n.imu_present ? '' : ' (no IMU)'}`, px + 11, py + 4);
+    // 1-sigma confidence ellipse (the honest uncertainty). Canvas rotation is
+    // clockwise in screen coords; our theta is CCW in world coords and screen y
+    // is flipped, so negate. Cap the drawn size so a huge tangential smear stays
+    // on-screen without hiding that it's huge.
+    const a = Math.min(el.a_m, 60) * METERS_TO_PX;
+    const b = Math.min(el.b_m, 60) * METERS_TO_PX;
+    const rot = -el.theta_deg * Math.PI / 180;
+    if (a > 1) {
+      ctx.beginPath();
+      ctx.ellipse(px, py, a, b, rot, 0, Math.PI * 2);
+      ctx.strokeStyle = n.grade === 'coordinate' ? 'rgba(102,204,255,0.45)' : 'rgba(202,166,102,0.4)';
+      ctx.setLineDash(n.grade === 'coordinate' ? [] : [4, 4]);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // topology/stale: also draw the range ring around the anchor (bearing unknown,
+    // but the distance-from-anchor is the trustworthy scalar).
+    if ((n.grade === 'topology' || n.grade === 'stale') && n.range_from_anchor_m > 0.5) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, n.range_from_anchor_m * METERS_TO_PX, 0, Math.PI * 2);
+      ctx.strokeStyle = n.grade === 'stale' ? 'rgba(136,136,136,0.15)' : 'rgba(202,166,102,0.15)';
+      ctx.setLineDash([2, 5]); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // the marker: solid dot when located, hollow when topology/stale
+    ctx.globalAlpha = n.grade === 'stale' ? 0.35 : (0.5 + 0.5 * (n.pos_confidence || 0));
+    ctx.beginPath();
+    ctx.arc(px, py, 6, 0, Math.PI * 2);
+    if (n.grade === 'coordinate') {
+      ctx.fillStyle = par; ctx.fill();
+    } else {
+      ctx.fillStyle = '#16181c'; ctx.fill();
+      ctx.strokeStyle = par; ctx.lineWidth = 2; ctx.stroke();
+    }
+    ctx.globalAlpha = 1.0;
+    label(px, py, n, n.grade === 'stale' ? '#888' : '#ccc');
   }
+}
+
+function label(px, py, n, color) {
+  ctx.fillStyle = color;
+  ctx.font = '11px sans-serif';
+  const tag = n.is_anchor ? '' : (n.grade === 'coordinate' ? '' : ` (${n.grade})`);
+  ctx.fillText(`#${n.node_id}${tag}`, px + 11, py + 4);
 }
 
 function renderTable() {
@@ -97,11 +145,28 @@ function renderTable() {
   tbody.innerHTML = '';
   for (const n of latestNodes) {
     const tr = document.createElement('tr');
+    const g = n.grade || (n.is_anchor ? 'anchor' : 'topology');
     tr.innerHTML = `<td>${n.is_anchor ? '★ ' : ''}${n.node_id}</td>
+      <td class="grade-${g}">${g}</td>
       <td class="status-${n.par_status}">${n.par_status}</td>
-      <td>${n.battery_pct}%</td>
       <td>${n.age_s}s</td>`;
     tbody.appendChild(tr);
+  }
+}
+
+function renderBanner() {
+  const b = document.getElementById('banner');
+  if (latestEnv.flip_unstable) {
+    b.className = 'crit';
+    b.textContent = 'TOPOLOGY MODE — layout reflection-unstable; positions shown as proximity only';
+  } else if (latestEnv.graph_rigid === false) {
+    b.className = 'warn';
+    b.textContent = 'TOPOLOGY MODE — mesh under-constrained; not enough links to fix positions';
+  } else if ((latestEnv.n_coordinate_grade || 0) === 0 && latestNodes.length > 1) {
+    b.className = 'warn';
+    b.textContent = 'PROXIMITY ONLY — no responder is well enough constrained to locate yet';
+  } else {
+    b.className = '';
   }
 }
 
@@ -110,8 +175,10 @@ function connectWs() {
   ws.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
     latestNodes = data.nodes || [];
+    latestEnv = data.env || {};
     draw();
     renderTable();
+    renderBanner();
   };
   ws.onclose = () => setTimeout(connectWs, 2000); // auto-reconnect if the SBC service restarts
 }

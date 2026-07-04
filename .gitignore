@@ -21,3 +21,6 @@ firmware/.pio/
 # Editors
 .vscode/
 .idea/
+
+# Local preview/launch config (machine-specific paths)
+.claude/

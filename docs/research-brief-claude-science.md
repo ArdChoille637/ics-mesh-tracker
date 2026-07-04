@@ -174,9 +174,14 @@ et al.).
 > was **wrong** (P.833 has no path-loss exponent; its 8.7 dB is excess-vegetation-loss scatter). Science's
 > follow-up re-cite (Wang 2012, n≈1.8–2.5) was **also off** — Wang is open-grassland LOS not forest, and near-
 > ground 2.4 GHz is **two-slope** (n≈2 short-range → n≈3.5–4 past the ~50–110 m Fresnel breakpoint), so a single
-> low n *under-predicts* loss. Grounded single-slope value is **n≈3.0, σ≈6–8 dB** (Olasupo 2016 / Klaina 2018);
-> two-slope is the eventual upgrade. Also: `TX_POWER_AT_1M` → **per-unit + per-mounting** offset (item 4.3). See
-> `research-log.md` Passes 5–6.
+> low n *under-predicts* loss. **Final grounded value (Pass 8, from primary sources Michael supplied):
+> n=3.0, σ=8.0** — σ is now **measurement-backed**, not assumed: Schneider 2026 (Future Internet, 3.75 GHz
+> vineyard LNS at 1.5 m = responder height) reports α/σ by foliage density 2.27/7.21 (bare) → 4.23/8.97 (dense);
+> corroborated by Olasupo 2016, Boonlom 2026 (forest n=3.22), Klaina 2018, Barrios-Ulloa 2022. Shipped **v0.3.2**;
+> ±61% range error. **CLOSED (Pass 9): Science converged; items 1.1/1.2 settled.** Stays `indicative` only for the
+> on-hardware 2.4 GHz bench + a density/two-slope upgrade. Remaining `@code`: per-unit/per-mounting
+> `TX_POWER_AT_1M` (4.3), orientation-averaged RSSI window (1.7), σ-into-solver + confidence rings (0.2). See
+> `research-log.md` Passes 5–9.
 
 **1.2 — Body shadowing.** No code constant yet — it's the hidden term folding into 1.1. **Deliver:** from IEEE
 **802.15.6** body-area-channel measurements (CM3/CM4), the dB loss when the torso blocks the LoS between two

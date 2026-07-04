@@ -374,4 +374,28 @@ finally set the wildland `{n, σ}` from **measured** data rather than assumption
 (measured vegetation LNS for σ; four corroborating campaigns for n), with every earlier mis-citation corrected.
 The preset is still labelled `indicative` because the exact-match (2.4 GHz forest, on-hardware) measurement is
 the bench test — but it is no longer resting on any unread or mis-attributed citation.
+
+---
+
+## Pass 9 — Science converges; items 1.1/1.2 CLOSED (2026-07-04)
+
+Science's fourth revision of 1.1 is a **pure reconciliation** — it adopts the Pass 8 state verbatim (n=3.0,
+σ=8, the Schneider vineyard density table, the corroborating sources, the density/two-slope upgrade note) and
+introduces **no new claims**. Nothing to verify; nothing to change (v0.3.2 already reflects it). **Items 1.1 +
+1.2 are settled by agreement.** WILDLAND n=3.0/σ=8.0 (`indicative`, measurement-backed σ), STRUCTURAL 4.5/8.1
+and INDUSTRIAL 5.85/4.0 (`measured`) — all selectable via `set_environment()`.
+
+### Remaining `@code` (the RSSI-half work 1.1/1.2 hands off, none blocked on more research)
+
+1. **Per-unit + per-mounting `TX_POWER_AT_1M` offset (4.3)** — mechanism can be built now (a per-node dB offset
+   applied upstream of `rssi_to_distance_m`); the *values* need an on-hardware 1 m calibration per board+mount.
+2. **Orientation-averaged RSSI window (1.7)** — replace `_rssi_edges` latest-sample-wins with a short per-edge
+   window. **Open design sub-question:** which estimator best recovers the *unshadowed* (LoS) distance — a
+   median/mean pulls toward the middle of the 10–20 dB body-shadow swing, whereas the **max** (strongest RSSI in
+   the window) is closest to the LoS value. Worth settling (possibly `@science`) before coding, since it changes
+   what the window computes.
+3. **σ into the solver + confidence rings / topology fallback (0.2)** — the larger fusion redesign; the presets
+   now carry the σ it needs (`fractional_range_sigma()`).
+
+These form one coherent "RSSI honesty" fusion pass; best designed together rather than piecemeal.
   - When convenient, bench-measure the duty-cycled ESP-NOW-from-light-sleep average (the one open 5.0 number).

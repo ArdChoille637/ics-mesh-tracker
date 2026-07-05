@@ -10,7 +10,7 @@ namespace icsmesh {
 // Framing: 0x7E <len:u16 LE> <payload...> <crc8>
 class GatewayBridge {
  public:
-  void begin(HardwareSerial& port) { port_ = &port; }
+  void begin(Stream& port) { port_ = &port; }
 
   void forwardToSbc(const PacketHeader& hdr, const uint8_t* payload, size_t payload_len) {
     if (!port_) return;
@@ -77,7 +77,7 @@ class GatewayBridge {
     return crc;
   }
 
-  HardwareSerial* port_ = nullptr;
+  Stream* port_ = nullptr;
   State state_ = State::WAIT_START;
   uint16_t len_ = 0;
   uint16_t idx_ = 0;

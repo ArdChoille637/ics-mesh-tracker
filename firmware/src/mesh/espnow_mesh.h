@@ -3,6 +3,7 @@
 #include <functional>
 #include <map>
 #include "packet.h"
+#include <esp_now.h>
 
 namespace icsmesh {
 
@@ -72,7 +73,7 @@ class EspNowMesh {
 
  private:
   static void staticOnRecv(const uint8_t* mac, const uint8_t* data, int len);
-  static void staticOnRecvRssi(const esp_now_recv_info_t* info, const uint8_t* data, int len);
+  static void staticOnRecvRssi(const esp_now_recv_info* info, const uint8_t* data, int len);
   void onRawRecv(const uint8_t* mac, const uint8_t* data, int len, int8_t rssi);
   bool ensurePeer(const uint8_t* mac);
   bool sendTo(uint16_t to_node, PacketType type, const uint8_t* payload, size_t payload_len);

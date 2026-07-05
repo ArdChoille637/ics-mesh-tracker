@@ -61,20 +61,29 @@ pins; call `Wire.begin(sda_pin, scl_pin)` in `main.cpp`'s `setup()` before
 
 ## Flashing the 4-board fleet
 
-Requires [PlatformIO](https://platformio.org/) (CLI or VS Code extension).
+Requires [PlatformIO](https://platformio.org/) (CLI or VS Code extension). The
+firmware targets the **`pioarduino` platform** (Arduino Core 3.0 / ESP-IDF 5) —
+`platformio.ini` pins it, so `pio` fetches it automatically.
 
 ```
 cd firmware
-pio run -e field -t upload        # flash to 2 boards (do one at a time, one USB port at a time)
-pio run -e team_lead -t upload    # flash to 1 board
-pio run -e gateway -t upload      # flash to 1 board
+pio run -e field -t upload             # XIAO ESP32S3 field node (flash to as many as you like)
+pio run -e team_lead -t upload         # 1 board
+pio run -e gateway -t upload           # 1 board (USB-tethered to the SBC)
+pio run -e field_nano_esp32 -t upload  # a field node on an Arduino Nano ESP32 (esptool upload, avoids Mac DFU issues)
 ```
 
-Board role is baked in at build time (`platformio.ini`'s three
-environments) — see `docs/protocol.md` for why this beats runtime
-provisioning at a 4-board scale. `TEAM_ID` defaults to `1` for all of
-them; only change it if you're running more than one strike team's worth
-of nodes and need them to not auto-uplink to each other's lead.
+> **Status: this has been built and flashed to a real 4-node fleet** (Gateway,
+> Team Lead, 2× Field incl. one Arduino Nano ESP32) and run end-to-end against
+> the SBC — see [`docs/hardware-bringup.ipynb`](docs/hardware-bringup.ipynb).
+> Node registration, telemetry, PAR status, and ICS-214 logging all worked live.
+> Positioning constants are still `indicative` (bench-calibration pending).
+
+Board role is baked in at build time (`platformio.ini`'s environments) — see
+`docs/protocol.md` for why this beats runtime provisioning at a 4-board scale.
+`TEAM_ID` defaults to `1` for all of them; only change it if you're running more
+than one strike team's worth of nodes and need them to not auto-uplink to each
+other's lead.
 
 After flashing, `pio device monitor` on the `field`/`team_lead` boards
 shows debug logs over the same USB port. The `gateway` board's USB port is

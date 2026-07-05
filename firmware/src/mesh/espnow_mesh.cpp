@@ -191,7 +191,7 @@ std::map<uint16_t, NeighborObservation> EspNowMesh::neighborRssi(uint32_t max_ag
   return fresh;
 }
 
-void EspNowMesh::staticOnRecvRssi(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
+void EspNowMesh::staticOnRecvRssi(const esp_now_recv_info* info, const uint8_t* data, int len) {
   if (!self_) return;
   int8_t rssi = info->rx_ctrl ? info->rx_ctrl->rssi : 0;
   self_->onRawRecv(info->src_addr, data, len, rssi);

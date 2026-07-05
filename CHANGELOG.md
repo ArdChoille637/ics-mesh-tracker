@@ -4,6 +4,27 @@ Iteration history for the ICS Mesh Tracker prototype. All dates 2026-07-03 (buil
 over one intensive session). Versions are development milestones, not releases —
 nothing here has run on real hardware yet (see each entry's "Verified" line).
 
+## v0.5.1 — Firmware compiles + flashed on real hardware (Core 3.0 migration)
+
+The firmware — written but never compile-tested in earlier versions — was
+brought up on **real hardware**: a 4-node ESP-NOW fleet (Gateway, Team Lead,
+2× Field incl. an Arduino Nano ESP32) flashed and run end-to-end against the SBC.
+Live test confirmed node registration, telemetry, PAR (OK/EMERGENCY/MAYDAY),
+and ICS-214 logging over the v0.5.0 command map, including the 0.2 honesty
+behaviors (a silent node correctly aging to `stale`, topology grading, the
+proximity banner). See `docs/hardware-bringup.ipynb`.
+
+Firmware fixes for Arduino Core 3.0 / ESP-IDF 5 (`pioarduino` platform):
+- `platformio.ini`: platform → the `pioarduino` fork; NimBLE-Arduino → `^2.1.0`;
+  new `[env:field_nano_esp32]` (Arduino Nano ESP32, `esptool` upload).
+- `GatewayBridge::begin` takes a generic `Stream&` (was `HardwareSerial&`) so it
+  binds the ESP32-S3's native USB CDC (`HWCDC`) — required for the gateway role.
+- `esp_now_recv_info_t` → `esp_now_recv_info` (Core 3.0 struct-tag) + `<esp_now.h>`
+  include.
+
+Compatibility only — no logic change. (Firmware bring-up + fixes by the Antigravity/
+Gemini collaboration; reconciled into this repo. SBC code unchanged from v0.5.0.)
+
 ## v0.5.0 — Honest fusion (item 0.2): dB-space solve, confidence ellipses, topology grading
 
 The RSSI solve was redesigned to be honest about what range-only body-worn RSSI

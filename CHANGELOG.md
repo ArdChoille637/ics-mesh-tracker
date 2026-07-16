@@ -4,6 +4,38 @@ Iteration history for the ICS Mesh Tracker prototype. All dates 2026-07-03 (buil
 over one intensive session). Versions are development milestones, not releases —
 nothing here has run on real hardware yet (see each entry's "Verified" line).
 
+## v0.6.0 — Node wiring bring-up: MPU-6050 + microSD field logger (team lead)
+
+Wiring the first real TEAM_LEAD node (MPU-6050 GY-521 over I²C + a microSD adapter
+over SPI). Firmware updated to match.
+
+- **`firmware/src/board_pins.h`** (new) — single source of truth for the wiring
+  (I²C SDA=GPIO5/SCL=GPIO6, MPU INT=GPIO2; SPI SD SCK=GPIO7/MISO=GPIO8/MOSI=GPIO9/
+  CS=GPIO3). Both buses on the XIAO ESP32-S3 defaults. See `docs/wiring.md`.
+- **`main.cpp` now calls `Wire.begin()`** — it never did. I²C was never initialized,
+  so the MPU would have failed to probe; the earlier bring-up only passed because no
+  IMU was physically wired. This is the fix that makes the sensor actually work.
+- **`firmware/src/storage/sd_logger.h`** (new) — TEAM_LEAD-only removable field
+  record `/ICSLOG.CSV` (PAR changes, ICS-214 entries, 5 s telemetry snapshots).
+  Lock-free FreeRTOS queue: any task enqueues (non-blocking, safe from the ESP-NOW
+  WiFi + BLE callbacks), only `loop()` writes the card; RFC4180 CSV escaping;
+  remount-on-repeated-failure instead of latching off. FIELD/GATEWAY never mount it.
+- **Serial `[hb]` health heartbeat** (FIELD/TEAM_LEAD, every 3 s): `imu=`/`sd=`/
+  `peers=`/`team=`/`dropped=` for quick node-health checks on a USB console.
+
+Adversarial pre-flash review (4 agents) caught 3 real HIGH SD bugs (CSV escaping,
+transient-failure latch, cross-task blocking I/O) — all fixed above — plus a HIGH
+**hardware** caution: power the microSD from 5V only with a level-shifted adapter
+(74LVC125), else move VCC→3V3 (the S3 GPIOs are not 5V-tolerant). See `docs/wiring.md`.
+
+Verified **on real hardware**: all 3 role images compile (pioarduino); `team_lead` +
+`gateway` flashed to the two boards; the team-lead heartbeat reads
+`[hb] node=3098 role=LEAD imu=1 sd=1 peers=0/1 team=1 dropped=0` with a steadily
+climbing uptime — i.e. MPU/I²C up (the `Wire.begin()` fix), microSD mounted, the SD
+queue losing nothing, and meshing to the gateway. (The heartbeat had to be read from an
+interactive terminal — the S3's native-USB HWCDC only streams to a host that asserts a
+"connected"/DTR state, which a headless build environment doesn't.)
+
 ## v0.5.1 — Firmware compiles + flashed on real hardware (Core 3.0 migration)
 
 The firmware — written but never compile-tested in earlier versions — was

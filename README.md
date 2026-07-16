@@ -48,16 +48,19 @@ FIELD node ---beacon/telemetry---/                                              
 | Part | Qty | Notes |
 |---|---|---|
 | Seeed XIAO ESP32S3 | 4 | you already have these |
-| External IMU (e.g. **MPU6050** breakout) | 3-4 | **the bare XIAO ESP32S3 has no onboard IMU** (the "Sense" variant adds a camera+mic, not an IMU) — step-detection PDR needs one wired over I2C. `firmware/src/imu/mpu6050_driver.h` targets a stock MPU6050 breakout (cheap, ubiquitous); swap in a different `IImuDriver` implementation if you use something else (it must provide a fixed-rate FIFO/streaming path — see `step_pdr.h`). GATEWAY node doesn't need one. |
+| External IMU (e.g. **MPU6050 / GY-521** breakout) | 3-4 | **the bare XIAO ESP32S3 has no onboard IMU** (the "Sense" variant adds a camera+mic, not an IMU) — step-detection PDR needs one wired over I2C. `firmware/src/imu/mpu6050_driver.h` targets a stock MPU6050 breakout (cheap, ubiquitous); swap in a different `IImuDriver` implementation if you use something else (it must provide a fixed-rate FIFO/streaming path — see `step_pdr.h`). GATEWAY node doesn't need one. |
+| microSD adapter + card (**level-shifted**) | 1 | **TEAM_LEAD only** — a removable field record (`/ICSLOG.CSV`: PAR + ICS-214 + telemetry) that survives node loss / a dead SBC link. SPI. Use a **level-shifted** adapter (74LVC125) if powering from 5V — see the ⚠️ in [`docs/wiring.md`](docs/wiring.md). FIELD/GATEWAY nodes omit it. |
 | USB battery / LiPo + charge circuit per FIELD/TEAM_LEAD node | 3-4 | for field-worn operation; the XIAO ESP32S3 has a JST-1.25 battery connector + built-in charger |
 | On-site SBC (Raspberry Pi or similar) | 1 | runs `sbc-gateway/`; USB-connects to the GATEWAY node |
 | USB cable, GATEWAY node → SBC | 1 | this is the only wired link in the system |
 
-Wiring the MPU6050: XIAO ESP32S3's default I2C pins (check your specific
-breakout silkscreen — commonly labeled SDA/SCL) to the MPU6050's SDA/SCL,
-plus 3V3 and GND. No code changes needed if you use the default `Wire`
-pins; call `Wire.begin(sda_pin, scl_pin)` in `main.cpp`'s `setup()` before
-`imu_driver.begin()` if you wire to different GPIOs.
+**Wiring:** see **[`docs/wiring.md`](docs/wiring.md)** for the full per-role pin
+table (and the important 5V-microSD-adapter safety check). In short, on the
+XIAO ESP32-S3 the MPU-6050 goes on the default I²C pins (SDA=D4/GPIO5,
+SCL=D5/GPIO6) and the team-lead's microSD on the default SPI bus (SCK=D8, MISO=D9,
+MOSI=D10, CS=D2). Pins live in `firmware/src/board_pins.h`; `main.cpp` now always
+calls `Wire.begin()` at startup, so the default wiring works out of the box.
+Field nodes are this layout minus the SD adapter; the gateway needs no external parts.
 
 ## Flashing the 4-board fleet
 

@@ -7,6 +7,8 @@
 // provisioning UI. Promote that to a captive-portal config step once the
 // fleet grows past what you can track by which USB port it's on.
 #include <Arduino.h>
+#include <Wire.h>
+#include "board_pins.h"
 #include "mesh/espnow_mesh.h"
 #include "mesh/gateway_bridge.h"
 #include "imu/mpu6050_driver.h"
@@ -14,6 +16,7 @@
 #include "ble/ics_ble_service.h"
 #include "webportal/captive_portal.h"
 #include "ics/ics_forms.h"
+#include "storage/sd_logger.h"
 
 using namespace icsmesh;
 
@@ -37,12 +40,15 @@ StepPdr pdr(imu_driver);   // step-detection PDR + NMNI heading (replaced double
 IcsBleService ble;             // FIELD / TEAM_LEAD only
 CaptivePortal portal;          // FIELD / TEAM_LEAD only
 GatewayBridge gateway_bridge;  // GATEWAY only
+SdLogger sd_logger;            // TEAM_LEAD only (begin() called there); no-op elsewhere
 
 ParStatus g_par_status = ParStatus::OK;
 uint32_t g_last_beacon_ms = 0;
 uint32_t g_beacon_interval_ms = 2000;
 uint32_t g_last_telemetry_ms = 0;
 uint32_t g_last_uplink_check_ms = 0;
+uint32_t g_last_sd_tele_ms = 0;
+uint32_t g_last_hb_ms = 0;
 uint16_t g_uplink_node = 0;  // team lead (for FIELD) or gateway (for TEAM_LEAD), 0 = not yet discovered
 
 // TEAM_LEAD only: buffered telemetry from its own team members, flushed as
@@ -54,6 +60,9 @@ void applyParStatus(ParStatus s) {
   if (kBuildRole != ROLE_GATEWAY) portal.setParStatus(s);
   ParUpdatePayload p{s, millis()};
   if (g_uplink_node) mesh.sendParUpdate(g_uplink_node, p);
+  // Persist this node's own PAR transitions to the removable field record
+  // (team lead only; no-op where no SD card is present).
+  sd_logger.logEvent("PAR", String("self=") + (int)s);
 }
 
 TelemetryPayload buildOwnTelemetry() {
@@ -90,6 +99,7 @@ void setupFieldOrLead() {
     loadIcs214(log);
     log.append(p.timestamp_ms, mesh.selfNodeId(), text);
     saveIcs214(log);
+    sd_logger.logEvent("214", String(mesh.selfNodeId()) + ": " + text);
   });
   ble.onParFromPhone(applyParStatus);
 
@@ -100,7 +110,13 @@ void setupFieldOrLead() {
     p.timestamp_ms = millis();
     strncpy(p.text, text.c_str(), kIcs214TextMax - 1);
     if (g_uplink_node) mesh.sendIcs214Entry(g_uplink_node, p);
+    sd_logger.logEvent("214", String(mesh.selfNodeId()) + ": " + text);
   });
+
+  // Initialize the I2C bus BEFORE probing the IMU. The MPU-6050 driver only
+  // issues Wire transactions; without this begin() the ESP32 I2C peripheral is
+  // never brought up and every probe fails (SDA/SCL = D4/D5, see board_pins.h).
+  Wire.begin(pins::kI2cSda, pins::kI2cScl);
 
   if (imu_driver.begin()) {
     pdr.calibrate();                 // static boot: seed gyro-z bias (hold unit still ~1 s)
@@ -114,6 +130,15 @@ void setupFieldOrLead() {
 void setupTeamLead() {
   setupFieldOrLead();
   g_team_batch.count = 0;
+
+  // Team lead carries the microSD adapter (SPI, board_pins.h). Mount it as the
+  // removable field record — 214 log + PAR history survive node loss / a dead
+  // SBC link. Absent card just disables logging (present() stays false).
+  if (sd_logger.begin()) {
+    Serial.println("[main] microSD mounted — logging to /ICSLOG.CSV");
+  } else {
+    Serial.println("[main] no microSD detected — field record disabled");
+  }
 
   // Team lead relays its team's telemetry upward, and also forwards
   // ICS-214 entries / PAR updates it receives from its own team FIELD
@@ -135,6 +160,7 @@ void setupTeamLead() {
   mesh.onParUpdate([](uint16_t from_node, const ParUpdatePayload& p) {
     Serial.printf("[lead] PAR from %u: %d\n", from_node, (int)p.status);
     if (g_uplink_node) mesh.sendParUpdate(g_uplink_node, p);
+    sd_logger.logEvent("PAR", String(from_node) + "=" + (int)p.status);
   });
   mesh.onIcs214Entry([](uint16_t from_node, const Ics214EntryPayload& p) {
     if (g_uplink_node) mesh.sendIcs214Entry(g_uplink_node, p);
@@ -142,6 +168,7 @@ void setupTeamLead() {
     loadIcs214(log);
     log.append(p.timestamp_ms, from_node, String(p.text));
     saveIcs214(log);
+    sd_logger.logEvent("214", String(from_node) + ": " + String(p.text));
   });
 }
 
@@ -222,6 +249,38 @@ void loop() {
       }
     }
     if (g_uplink_node) mesh.sendTelemetryBatch(g_uplink_node, g_team_batch);
+
+    // Periodic team snapshot to the SD field record (every ~5 s, not every
+    // beat — enough to reconstruct the incident, easy on the card).
+    if (now - g_last_sd_tele_ms > 5000) {
+      g_last_sd_tele_ms = now;
+      sd_logger.logEvent("TELE", String("team=") + g_team_batch.count +
+                                 " steps=" + self_t.step_count +
+                                 " hdg_mrad=" + self_t.heading_mrad +
+                                 " par=" + (int)self_t.par_status);
+    }
+  }
+
+  // Drain any queued SD writes here, in loop context — logEvent() only enqueues
+  // (it's called from the WiFi/BLE tasks too), so this is the one place the card
+  // is actually touched. No-op on FIELD/GATEWAY (queue never created).
+  sd_logger.service();
+
+  // Serial health heartbeat (FIELD / TEAM_LEAD only — the GATEWAY's Serial is
+  // the binary SBC link and must stay clean). One line every 3 s so a laptop on
+  // the USB port can confirm node health (IMU wired? SD mounted? mesh peers?)
+  // without having to catch the boot banner across the native-USB re-enumerate.
+  if (kBuildRole != ROLE_GATEWAY && now - g_last_hb_ms > 3000) {
+    g_last_hb_ms = now;
+    Serial.printf("[hb] node=%u role=%s imu=%d sd=%d peers=%u team=%u dropped=%u up=%lus\n",
+                  mesh.selfNodeId(),
+                  (kBuildRole == ROLE_TEAM_LEAD ? "LEAD" : "FIELD"),
+                  imu_driver.present() ? 1 : 0,
+                  sd_logger.present() ? 1 : 0,
+                  (unsigned)mesh.neighborRssi().size(),
+                  (unsigned)g_team_batch.count,
+                  (unsigned)sd_logger.dropped(),
+                  (unsigned long)(now / 1000));
   }
 
   if (kBuildRole != ROLE_GATEWAY) portal.handleClient();

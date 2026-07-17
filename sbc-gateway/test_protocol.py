@@ -151,6 +151,24 @@ def test_unsplit_oversize_would_be_dropped():
     assert all(HEADER_SIZE + len(b) <= ESPNOW_MAX_FRAME for b in batch.split_frames())
 
 
+def test_node_id_from_mac_matches_firmware():
+    # Must reproduce firmware espnow_mesh.cpp node_id_from_mac() bit-for-bit —
+    # the SBC uses it to identify the gateway from its USB MAC. Known fleet:
+    from protocol import node_id_from_mac, parse_mac
+    known = {
+        "DC:B4:D9:3A:6D:08": 12457,  # gateway
+        "14:C1:9F:51:12:54": 3098,   # team lead
+        "A4:CB:8F:DF:D8:F8": 27420,  # field 1
+        "14:C1:9F:52:84:FC": 34347,  # field 2
+    }
+    for mac, expect in known.items():
+        assert node_id_from_mac(parse_mac(mac)) == expect, mac
+    # colon-less form (some hosts) parses identically
+    assert parse_mac("DCB4D93A6D08") == parse_mac("DC:B4:D9:3A:6D:08")
+    # junk -> None (never a bogus anchor)
+    assert parse_mac("not-a-mac") is None and parse_mac("DEAD") is None
+
+
 def test_telemetry_payload_round_trip():
     # Base-payload fidelity (the kind of round-trip already validated in the
     # project) — the batch tests lean on this holding.

@@ -264,3 +264,29 @@ def decode_payload(hdr: PacketHeader, payload: bytes):
     except struct.error:
         return None
     return None
+
+
+def node_id_from_mac(mac: bytes) -> int:
+    """Python mirror of firmware node_id_from_mac() (espnow_mesh.cpp): FNV-1a
+    over the 6 MAC bytes, folded to 16 bits, never 0. Lets the SBC compute the
+    node_id of the gateway it's USB-connected to (from the port's USB serial =
+    the ESP32-S3 base MAC), so the gateway can be pinned as the fusion anchor
+    without any firmware handshake."""
+    h = 2166136261
+    for b in mac:
+        h = ((h ^ b) * 16777619) & 0xFFFFFFFF
+    nid = (h ^ (h >> 16)) & 0xFFFF
+    return nid or 1
+
+
+def parse_mac(s: str) -> bytes | None:
+    """Parse a USB serial-number string into 6 MAC bytes. ESP32-S3 native USB
+    reports the base MAC as the iSerial, e.g. 'DC:B4:D9:3A:6D:08' (some hosts
+    drop the colons). Returns None if it doesn't look like a 6-byte MAC."""
+    hexstr = s.replace(":", "").replace("-", "").strip()
+    if len(hexstr) != 12:
+        return None
+    try:
+        return bytes.fromhex(hexstr)
+    except ValueError:
+        return None

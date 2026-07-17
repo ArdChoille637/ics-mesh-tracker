@@ -24,3 +24,8 @@ firmware/.pio/
 
 # Local preview/launch config (machine-specific paths)
 .claude/
+
+# SBC runtime state + QGIS-generated artifacts (not source)
+sbc-gateway/origin.json
+sbc-gateway/symbology-style.db
+sbc-gateway/qgis/*.qgz

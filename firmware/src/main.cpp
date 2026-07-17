@@ -118,6 +118,18 @@ void setupFieldOrLead() {
   // never brought up and every probe fails (SDA/SCL = D4/D5, see board_pins.h).
   Wire.begin(pins::kI2cSda, pins::kI2cScl);
 
+  // Mount the microSD field record if a card is wired + inserted. FIELD nodes
+  // are soldered identically to the TEAM_LEAD (same SD adapter), so every
+  // non-gateway node ATTEMPTS the mount — a node without a card just gets
+  // sd=0 on the heartbeat and logEvent() stays a no-op. Removable /ICSLOG.CSV
+  // (PAR + ICS-214) survives node loss / a dead uplink on whichever node
+  // carries a card.
+  if (sd_logger.begin()) {
+    Serial.println("[main] microSD mounted — logging to /ICSLOG.CSV");
+  } else {
+    Serial.println("[main] no microSD detected — field record disabled");
+  }
+
   if (imu_driver.begin()) {
     pdr.calibrate();                 // static boot: seed gyro-z bias (hold unit still ~1 s)
     imu_driver.enableFifo100Hz();    // switch to fixed-rate FIFO streaming (item 1.5)
@@ -128,17 +140,8 @@ void setupFieldOrLead() {
 }
 
 void setupTeamLead() {
-  setupFieldOrLead();
+  setupFieldOrLead();  // includes the SD mount attempt (shared with FIELD)
   g_team_batch.count = 0;
-
-  // Team lead carries the microSD adapter (SPI, board_pins.h). Mount it as the
-  // removable field record — 214 log + PAR history survive node loss / a dead
-  // SBC link. Absent card just disables logging (present() stays false).
-  if (sd_logger.begin()) {
-    Serial.println("[main] microSD mounted — logging to /ICSLOG.CSV");
-  } else {
-    Serial.println("[main] no microSD detected — field record disabled");
-  }
 
   // Team lead relays its team's telemetry upward, and also forwards
   // ICS-214 entries / PAR updates it receives from its own team FIELD

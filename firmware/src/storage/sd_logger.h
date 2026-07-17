@@ -30,10 +30,11 @@ namespace icsmesh {
 // the actual card I/O happens in service(), called ONLY from loop(). All SD
 // access is thus serialized to one context and decoupled from the radio tasks.
 //
-// FIELD/GATEWAY nodes don't wire the SD adapter and never call begin(), so the
-// queue is never created and every logEvent() is a no-op — the same firmware
-// image runs on every role (see board_pins.h). SD.h/SPI.h ship with the
-// arduino-esp32 core, so this adds no PlatformIO lib_deps.
+// FIELD nodes are soldered identically to the TEAM_LEAD, so both roles attempt
+// begin() at setup; a node without a card (or without the adapter) just gets
+// present_=false and every logEvent() is a no-op — the same firmware image runs
+// on every role (see board_pins.h). GATEWAY never calls begin(). SD.h/SPI.h
+// ship with the arduino-esp32 core, so this adds no PlatformIO lib_deps.
 class SdLogger {
  public:
   // Mount the card on the XIAO's default SPI bus (board_pins.h). Returns false

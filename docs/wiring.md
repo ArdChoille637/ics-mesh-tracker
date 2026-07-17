@@ -27,9 +27,11 @@ Free for expansion (status LED, buzzer, battery sense): **GPIO1 (D0), GPIO4 (D3)
 
 > **GPIO3 (SD CS) note:** GPIO3 is an ESP32-S3 strapping pin (JTAG-source select), but that only matters if the `JTAG_SEL` eFuse is burned (it isn't from the factory), so the SD CS pull-up is harmless for boot/flash. Only move CS (to D0/D3) if you later want to attach an external pin-JTAG debugger.
 
-## Field node (simple build: MPU-6050 only)
+## Field node (soldered identically; SD card optional)
 
-A field node is the team-lead layout **minus the microSD adapter** — wire only the I²C block (SDA/SCL/INT + 3V3 + GND). Leave the SPI pins (D2/D8/D9/D10) unconnected. Same firmware image; `-e field` never calls `SdLogger::begin()`, so those pins stay free.
+Field nodes are **soldered identically to the team lead** (MPU + microSD adapter, both buses). The firmware attempts the SD mount on every non-gateway node: with **no card inserted** the node just runs with `sd=0` on the heartbeat and logging off; insert a card and it keeps its own removable PAR/ICS-214 record too. (A minimal field build — I²C block only, SPI unconnected — also works; the mount attempt fails gracefully.)
+
+**AD0 must be bridged to GND** (sets I²C address `0x68`, which the firmware expects). GY-521 boards float low without it, but an unbridged AD0 can flip to `0x69` with noise and the IMU "vanishes" — bridge it on every node.
 
 ## Gateway node (minimal build: bare board)
 

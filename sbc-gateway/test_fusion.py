@@ -94,6 +94,53 @@ def test_moving_node_grades_topology():
     assert f.nodes[2].grade == "topology"
 
 
+def test_gateway_locked_anchor_survives_lead_batch():
+    # Gateway-anchored route: the SBC pins the gateway (lock=True); a later
+    # TELEMETRY_BATCH from the team lead calls set_anchor(lead) softly, which
+    # must NOT steal the frame origin (the gateway is the host-GPS reference).
+    f = NetworkFusion()
+    GW, LEAD = 12457, 3098
+    f.set_anchor(GW, lock=True)
+    assert f._anchor_node_id == GW and f._anchor_locked
+    f.set_anchor(LEAD)            # soft, as server.on_frame does on a batch
+    assert f._anchor_node_id == GW, f"lead stole the locked anchor -> {f._anchor_node_id}"
+    # the gateway is the (0,0) node -> georeferences to the origin exactly
+    assert f.nodes[GW].is_anchor and f.nodes[GW].x_m == 0.0 and f.nodes[GW].y_m == 0.0
+
+
+def test_disconnected_cluster_never_placed_relative_to_gateway():
+    # Anchor-reachability: a field cluster that is internally RIGID (so it slips
+    # past the global Laman count) but never hears the gateway anchor has no
+    # edge-path to it, so its position relative to the gateway is unknown. Such
+    # nodes must grade topology/stale with NO ring — never a fabricated
+    # coordinate fix (the 0.2 "never more precise than the data supports" rule).
+    f = NetworkFusion()
+    GW = 12457
+    f.set_anchor(GW, lock=True)
+    cluster = [40, 41, 42, 43, 44]   # 5-node complete mesh (10 edges >= 2*5-1)
+    for _ in range(8):
+        for a in cluster:
+            feed(f, a, {b: 6.0 for b in cluster if b != a})
+        f.recompute_multilateration()
+    for nid in cluster:
+        s = f.nodes[nid]
+        assert s.grade in ("topology", "stale"), f"{nid} graded {s.grade} disconnected from anchor"
+        assert s.ring_m is None, f"{nid} got ring {s.ring_m} despite unknown range to gateway"
+    assert f.nodes[GW].is_anchor and f.nodes[GW].grade == "anchor"
+
+
+def test_no_anchor_still_ages_out():
+    # The QGIS review's catch: recompute's anchor-None early return skipped
+    # _age_out, so before any TEAM_LEAD batch arrives (anchor unset) a node
+    # that went silent kept its last grade forever. Every recompute exit must
+    # sweep staleness.
+    f = NetworkFusion()
+    feed(f, 7, {8: 5.0})            # ingest creates node 7; no anchor ever set
+    f.nodes[7].last_telemetry_s -= (STALE_AGE_S + 5)
+    f.recompute_multilateration()   # anchor is None -> early return path
+    assert f.nodes[7].grade == "stale", f.nodes[7].grade
+
+
 def test_offair_node_goes_stale_not_confident_coordinate():
     # THE critical regression: a node that was coordinate-grade then loses all
     # RF (no telemetry AND unobserved) must not linger as a confident dot.

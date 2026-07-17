@@ -1,5 +1,118 @@
 # Changelog
 
+## Unreleased — Gateway-anchored map (reconciled with the QGIS plugin route)
+
+The map now anchors on the **gateway** — the one node whose real position is
+known (it sits at the host/SBC and takes the host's GPS) — and triangulates
+every other node relative to it. Replaces the team-lead-as-anchor model, and
+converges the two parallel QGIS efforts onto one server contract + one plugin.
+
+- **`fusion.set_anchor(id, lock=True)`** pins the gateway; the TELEMETRY_BATCH
+  path can no longer steal the frame origin. The gateway grades `anchor` from
+  the first snapshot even before any solve.
+- **Gateway auto-identified** from its USB serial (= ESP32-S3 base MAC) hashed
+  to a node_id — `protocol.node_id_from_mac`/`parse_mac`, bit-exact to firmware.
+  `server.py --gateway-node-id N` overrides; `--no-gateway-anchor` reverts to
+  the team-lead soft anchor. Port match handles macOS cu./tty. + symlinks and
+  is gated to the Espressif USB VID so a stray device can't become a bogus anchor.
+- **Anchor-reachability gate** (`fusion.py`): a node with no RSSI edge-path to
+  the gateway is translationally unconstrained, so it's forced to `topology`
+  with no ring — never a fabricated coordinate fix (honors the 0.2 invariant at
+  scale, not just via the incidental sample/rigidity masks). Verified that a
+  field node's `rssi[]` report of the never-transmitting gateway *does* create
+  the anchor edge, so a normally-in-range team triangulates relative to it.
+- **`/api/nodes`** now returns per-node `lat`/`lon` (server-georeferenced
+  through the gateway/host-GPS origin, rotation applied) + `origin` +
+  `anchor_node_id`, so the QGIS plugin plots geometry directly — no client-side
+  trig, no north-assumption.
+- **QGIS plugin** at `qgis-plugin/` — folded in from the `gemini-fixes` branch
+  (Gemini's dockwidget with a live node table + REST poll of `/api/nodes`) and
+  corrected for the gateway-anchored model: plots the server's `lat`/`lon`
+  directly (deleting the client-side `computeDestination(atan2(x_m,y_m))`
+  north-assumption), repurposes the map-click to `POST /api/origin` (manual
+  origin override when there's no host GPS), PyQt6-scoped enums throughout
+  (`Qt.DockWidgetArea.*`, `QHeaderView.ResizeMode.*`, `Qt.GlobalColor.*`) so it
+  loads + renders on QGIS 4.2, hollow markers for unlocated responders, honesty
+  banner.
+- **Gateway 80 MHz thermal underclock** (`firmware/platformio.ini`, gateway env)
+  — folded from `gemini-fixes`: the USB-tethered gateway was dropping its link
+  under sustained load; it only bridges frames so it doesn't need 240 MHz
+  (FIELD/TEAM_LEAD stay full-speed).
+
+Adversarially reviewed (3 lenses, incl. live checks against the installed QGIS
+4.2): 9 findings, 2 CRITICAL (both PyQt6 enum breakers in the plugin — would have
+been dead on arrival) and the honesty/robustness items above, all fixed. Tests:
+12/12 fusion (incl. locked-anchor + disconnected-cluster regressions), 7/7
+protocol (incl. MAC→node_id), 10/10 geo. Server live-verified: gateway pins as
+anchor at the host-GPS origin, `/api/nodes` serves plottable lat/lon.
+
+## Unreleased — Host-GPS origin anchoring
+
+`--origin-from-host`: the server anchors the incident origin to the host
+machine's own position and re-anchors periodically (default 60 s) — the SBC
+sits with the gateway, so the gateway + nearby nodes land where the host is
+on the QGIS basemap. Providers: CoreLocationCLI (macOS, one-time Location
+Services grant) → gpsd (Pi + USB GPS), via the new
+`sbc-gateway/origin_from_host.py` (also a standalone CLI with `--watch`).
+Rotation fields are always preserved — a host fix says where the anchor is,
+not which way the frame points. No fix → warn once, origin unchanged.
+
+## Unreleased — QGIS command map (replaces investment in the custom web map)
+
+The primary command map is now **QGIS**, fed live from the SBC server — no more
+custom map-app development (the web map stays as the zero-install fallback).
+
+- `sbc-gateway/geo.py` (new, stdlib-only): operator-set **incident origin**
+  (anchor lat/lon + frame rotation, persisted to `origin.json`, validated) and
+  GeoJSON builders that carry the honesty semantics: 1σ **ellipse polygons**
+  only for coordinate-grade nodes, anchor-centred **proximity rings** for
+  topology/stale nodes (bearing unknown ⇒ never a located dot), and
+  `origin_set` / `rotation_surveyed` flags on every feature (magnetometer-free
+  frame ⇒ rotation vs true north is arbitrary until surveyed).
+- `server.py`: `/qgis/nodes.geojson`, `/qgis/ellipses.geojson`,
+  `/qgis/rings.geojson` + `GET/POST /api/origin` (422 on out-of-range),
+  `--origin-lat/--origin-lon/--origin-rotation-deg`, and `--serial-port none`
+  (map development without a gateway).
+- `sbc-gateway/qgis/setup_qgis.py` (new): builds `qgis/ics-mesh.qgz` — OSM
+  basemap + the three live layers (2 s auto-refresh), PAR-status styling
+  (MAYDAY red / EMERGENCY orange / OK green), node labels, honesty labels on
+  rings. Same launch pattern as the awareness-engine QGIS builder.
+- `test_geo.py` (new): 10 stdlib tests — metric/rotation transform correctness,
+  GeoJSON validity, ellipse-only-for-coordinate, rings-centred-on-anchor,
+  origin validation/persistence/unset-flagging, banner levels, honesty labels.
+  Plus an end-to-end check that real fusion state (rigid-K4 + an aged-out node)
+  renders a stale node as a ring, never an ellipse.
+
+Adversarially reviewed (3 lenses, one verifying PyQGIS calls against the
+installed QGIS 4.0.3) — 12 findings, all fixed. The two critical: (1) unlocated
+(topology/stale) nodes rendered as solid confident dots → hollow dashed markers
+via a grade×PAR categorized renderer; (2) `setAutoRefreshEnabled` is RedrawOnly
+— it never re-fetches, silently freezing the "live" map at its first snapshot →
+`Qgis.AutoRefreshMode.ReloadData` (re-fetch verified live at ~2 s cadence).
+Plus: `/qgis` endpoints made read-only (recompute is stateful — viewers must
+not change fusion dynamics); `fusion.recompute` early-return paths now always
+run the `_age_out` staleness sweep; origin file validation/locking; a
+`/qgis/status.geojson` honesty banner (map.html renderBanner parity + ORIGIN
+NOT SET / ROTATION UNSURVEYED). Launch-verified end-to-end on QGIS 4.0.3:
+4/4 layers load, project saves (`qgis/ics-mesh.qgz`), live reload confirmed.
+Bootstrap hardening from the real launch: no `__file__` under `--code`,
+explicit renderers + `|geometrytype=` pinning so EMPTY endpoints (fresh
+incident, mesh not yet up) still build typed, renderable layers.
+
+## Unreleased — SD mount on FIELD nodes too; AD0 hard-bridged
+
+Field nodes are now soldered identically to the team lead (MPU + microSD
+adapter), so the SD mount attempt moved from `setupTeamLead()` into
+`setupFieldOrLead()` — every non-gateway node mounts a card if present (no card
+→ `sd=0`, logging off, graceful). AD0 is now hard-bridged to GND on all nodes
+(locks I²C addr `0x68`; it previously floated low, which worked but could flip
+to `0x69` under noise). `docs/wiring.md` updated.
+
+Verified on hardware: second (field) node soldered + flashed `-e field`
+(MAC A4:CB:8F:DF:D8:F8 → node 27420); its captive-portal AP `ICS-27420` observed
+broadcasting = app alive. Full heartbeat/mesh check pending the team lead being
+re-powered.
+
 Iteration history for the ICS Mesh Tracker prototype. All dates 2026-07-03 (built
 over one intensive session). Versions are development milestones, not releases —
 nothing here has run on real hardware yet (see each entry's "Verified" line).

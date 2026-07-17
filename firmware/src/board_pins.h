@@ -11,9 +11,10 @@
 // SPI = D8/D9/D10), so this layout also works with a bare Wire.begin()/SD.begin()
 // — the explicit pins here are for clarity and so a re-wire is a one-line change.
 //
-// Only the TEAM_LEAD node carries the microSD adapter; FIELD/GATEWAY nodes wire
-// the MPU (FIELD) or nothing (GATEWAY) and leave the SPI pins free. That's the
-// only way node roles differ electrically — see storage/sd_logger.h.
+// TEAM_LEAD and FIELD nodes are soldered identically (MPU + microSD adapter,
+// AD0 bridged to GND = I2C addr 0x68); a card is required on the TEAM_LEAD and
+// optional on FIELD (no card -> sd=0, logging off). GATEWAY wires nothing.
+// See storage/sd_logger.h.
 namespace icsmesh {
 namespace pins {
 

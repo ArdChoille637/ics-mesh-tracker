@@ -271,6 +271,7 @@ class NetworkFusion:
         # per-node heading window (heading_rad, ts) for the yaw-coverage gate (1.7b).
         self._heading_samples: dict[int, deque] = {}
         self._anchor_node_id: Optional[int] = None
+        self._anchor_locked = False   # pinned gateway anchor — batch senders can't override
         self._preset = ENV_PRESETS[environment]
         self._flip_history: deque = deque(maxlen=10)  # rolling reflection-repair flags
         self._flip_unstable = False
@@ -291,11 +292,19 @@ class NetworkFusion:
     def preset(self) -> EnvPreset:
         return self._preset
 
-    def set_anchor(self, node_id: int):
-        """Call once you know which node is TEAM_LEAD — usually the first
-        TELEMETRY_BATCH sender you see, since only leads send batches. Resets the
-        flip-guard state: chirality/rotation are tracked relative to a frame the
-        old anchor defined."""
+    def set_anchor(self, node_id: int, lock: bool = False):
+        """Choose the node that defines the relative frame's origin (0,0).
+
+        Two callers: (1) the TELEMETRY_BATCH path passes the lead (only leads
+        send batches) as a *soft* anchor; (2) the SBC pins the GATEWAY as a
+        *locked* anchor (lock=True) — the gateway is the one node whose true
+        position we know (host GPS), so it's the natural georeference. A locked
+        anchor ignores all later soft set_anchor() calls. Resets the flip-guard
+        state (chirality/rotation are tracked relative to the anchor's frame)."""
+        if self._anchor_locked and not lock:
+            return  # gateway is pinned; ignore soft (batch-sender) re-anchors
+        if lock:
+            self._anchor_locked = True
         if self._anchor_node_id == node_id:
             return
         self._anchor_node_id = node_id
@@ -308,6 +317,11 @@ class NetworkFusion:
         # from (0,0) after a lead handoff (review finding).
         a.x_m = 0.0
         a.y_m = 0.0
+        # Grade it as the anchor NOW, so a pinned gateway with zero edges yet still
+        # renders as the anchor (not the topology default) from the first snapshot.
+        a.grade = "anchor"
+        a.ring_m = None
+        a.pos_confidence = 1.0
         self._flip_history.clear()
         self._flip_unstable = False
         log.info("anchor set to node %d", node_id)
@@ -403,16 +417,22 @@ class NetworkFusion:
         now = time.time()
         edges = self._fresh_edges()
         anchor = self._anchor_node_id
+        # EVERY early return below must still run the _age_out sweep — any exit
+        # that skips it lets an off-air responder keep a frozen 'coordinate'
+        # grade + tight ellipse, the exact failure _age_out exists to prevent.
         if anchor is None:
+            self._age_out(set(), now)
             return
         if not edges:
             self._age_out({anchor}, now)   # a quiet mesh must still age responders out — not freeze grades
             return
         node_ids = sorted({n for e in edges for n in (e.a, e.b)} | {anchor})
         if len(node_ids) < 2:
+            self._age_out({anchor}, now)
             return
         free = [nid for nid in node_ids if nid != anchor]
         if not free:
+            self._age_out({anchor}, now)
             return
         fidx = {nid: i for i, nid in enumerate(free)}
         n_pl = self._preset.path_loss_n
@@ -451,6 +471,7 @@ class NetworkFusion:
                                 f_scale=SOFT_L1_F_SCALE, max_nfev=SOLVE_MAX_NFEV)
         except Exception:
             log.exception("multilateration solve failed")
+            self._age_out({anchor}, now)   # a broken solver must not freeze grades either
             return
 
         raw = {anchor: np.zeros(2)}
@@ -572,6 +593,22 @@ class NetworkFusion:
             max_resid[e.a] = max(max_resid.get(e.a, 0.0), r)
             max_resid[e.b] = max(max_resid.get(e.b, 0.0), r)
 
+        # Anchor reachability (BFS over the edge graph from the anchor). A node
+        # with no edge-path to the gateway is translationally UNCONSTRAINED — the
+        # solver left it wherever its x0 seed sat (near the origin), so its
+        # position relative to the gateway is fabricated. Such a node must never
+        # grade 'coordinate', and gets NO proximity ring (range to the anchor is
+        # unknown too, not just bearing). This survives a higher beacon rate and
+        # a bigger mesh, unlike the incidental N_SAMP / Laman masks.
+        reachable = set()
+        stack = [anchor]
+        while stack:
+            u = stack.pop()
+            if u in reachable:
+                continue
+            reachable.add(u)
+            stack.extend(incident.get(u, []))
+
         for nid in node_ids:
             s = self._ensure_node(nid)
             if nid == anchor:
@@ -634,12 +671,17 @@ class NetworkFusion:
                 # Fit sanity — grossly inconsistent edges
                 if max_resid.get(nid, 0.0) > RESID_REJECT_SIGMA:
                     grade = "topology"
+                # Gate D — anchor reachability (disconnected from the gateway)
+                if nid not in reachable:
+                    grade = "topology"
                 # global fail-safes
                 if self._flip_unstable or not self._graph_rigid:
                     grade = "topology"
 
             s.grade = grade
-            s.ring_m = None if grade == "coordinate" else float(R)
+            # No ring when located (coordinate) OR when disconnected from the
+            # anchor (range unknown) — only a range-known topology node gets one.
+            s.ring_m = float(R) if (grade in ("topology", "stale") and nid in reachable) else None
             yaw_ok = 1.0 if s.stationary else min(1.0, s.yaw_cov / YAW_COV_MIN)
             conf = (min(1.0, n_indep / RIGIDITY_MIN_EDGES)
                     * min(1.0, s.best_n_samp / N_SAMP_MIN)

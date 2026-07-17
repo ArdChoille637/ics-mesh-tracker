@@ -107,6 +107,48 @@ this is the command map + ICS-214/PAR dashboard. It's a separate surface
 from the on-node captive portals; a phone connected to a FIELD node's own
 AP won't see this page unless it's also on the SBC's network.
 
+## QGIS command map (primary)
+
+The map anchors on the **gateway** — the one node whose real position is known,
+because it sits at the host/SBC and takes the host's GPS — and triangulates every
+other node relative to it. The server does all the georeferencing; QGIS just
+draws it, styled by PAR status, with honesty semantics: located nodes as dots
+(+ 1σ ellipse on the web map), topology/stale nodes as hollow/ring markers
+(bearing unknown), and never a confident dot for a possibly-downed responder.
+
+Two front-ends, same server:
+
+**A) QGIS plugin (recommended)** — `qgis-plugin/` (works on QGIS 3.x and 4.x).
+Symlink or copy it into your QGIS plugins dir and enable it:
+
+```
+ln -s "$PWD/qgis-plugin" \
+  ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/ics_mesh_tracker
+```
+
+Open the **ICS Mesh Tracker** panel, set the SBC URL (default
+`http://127.0.0.1:8000`), and Connect — it polls `/api/nodes` and plots each
+responder at the server-computed lat/lon, live.
+
+**B) `.qgz` project** (no plugin install) — three auto-refreshing GeoJSON layers:
+
+```
+/Applications/QGIS-final-4_0_3.app/Contents/MacOS/QGIS-final-4_0_3 \
+  --nologo --code sbc-gateway/qgis/setup_qgis.py     # saves sbc-gateway/qgis/ics-mesh.qgz
+```
+
+**Anchoring the map to real coordinates** — run the server with
+`--origin-from-host` and it pulls this machine's GPS (CoreLocationCLI on macOS —
+`brew install corelocationcli` + a one-time Location Services grant; `gpsd` on a
+Pi) and pins it as the **gateway's** position, re-anchoring every 60 s. The
+gateway is auto-identified from its USB serial; override with `--gateway-node-id`
+or disable with `--no-gateway-anchor`. You can also set a fixed origin via
+`--origin-lat/--origin-lon` or `POST /api/origin`.
+
+**Honesty:** the nodes are magnetometer-free, so the constellation's rotation vs
+true north is *arbitrary* until you survey it (walk a known line, match a road) —
+until then every node carries `rotation_surveyed: false` and the banner says so.
+
 ## Tests
 
 Wire-protocol round-trip tests run with only the stdlib (no extra deps):

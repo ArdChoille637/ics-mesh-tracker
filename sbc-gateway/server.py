@@ -77,6 +77,14 @@ def api_ics214(limit: int = 200):
     return db.fetch_ics214(db_conn, limit)
 
 
+@app.get("/api/nodes")
+def api_nodes():
+    with fusion_lock:
+        snapshot = fusion.snapshot()
+        env = fusion.environment_summary()
+    return {"nodes": snapshot, "env": env}
+
+
 @app.get("/api/par/{node_id}")
 def api_par_history(node_id: int, limit: int = 20):
     return db.fetch_par_history(db_conn, node_id, limit)

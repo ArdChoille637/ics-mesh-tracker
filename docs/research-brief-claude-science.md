@@ -1,5 +1,14 @@
 # Claude Science — session briefing: ICS Mesh Tracker grounding study
 
+<!-- LIVING DOCUMENT — do not treat as one-shot. -->
+**Status:** `Tier 0/1/5 closed; 1.3/1.6, Tier 2, 0.4 open` · **Version:** v1.12 (Pass 12) · **Updated:** 2026-07-04
+
+> This brief is **iterated**: each Science pass, Claude Code verifies the claims,
+> folds the outcome in, and annotates the affected Tier item inline with a
+> `✔ PASS-N VERDICT` (full narrative in `docs/research-log.md`, Passes 1–12).
+> Science's raw handbacks are relayed by the user; **open agenda** = whatever
+> Tier item below has no closing verdict. (Version tracks the pass count.)
+
 *Paste this whole file at the start of a fresh Claude Science session. It is self-contained — you do not
 need repo access to begin. Where you need a specific file, ask the user to paste it.*
 

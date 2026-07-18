@@ -1,18 +1,40 @@
 # Claude Science — feasibility brief: mesh-RF "synchronized sweep" emergency-extraction concept
 
 <!-- LIVING DOCUMENT — do not treat as one-shot. -->
-**Status:** `awaiting Science's first pass` · **Version:** v0.1 · **Updated:** 2026-07-17
+**Status:** `PASS 1 FILED — coordinated sweep NO-GO; build (D) coded cadence + pursue FTM` · **Version:** v0.2 · **Updated:** 2026-07-17
 
 > Iterated as the Code⇄Science collaboration runs: each pass, Claude Code
-> verifies your claims, folds the outcome in, bumps the version, and annotates
-> the affected question inline with a `✔ PASS-N VERDICT` (full narrative will go
-> in `docs/rf-extraction-log.md` once passes accumulate). Your raw handbacks are
-> relayed by the user. **Open agenda** = whatever below has no closing verdict.
+> verifies the claims, folds the outcome in, bumps the version, and records the
+> verdict (full narrative in `docs/rf-extraction-log.md`). Raw handbacks relayed
+> by the user. **Open agenda** = whatever below has no closing verdict.
 
 ### Revision log
+- **v0.2 (2026-07-17)** — **Pass 1 filed + independently verified by Code.**
+  Verdict: the coordinated RF sweep/beam/chirp is **NO-GO on stock ESP32-S3**
+  (three independent reasons). Salvage: build **(D)** a single-node coded distress
+  cadence + **pursue FTM RTT**; through-medium locating = a separate low-band
+  device. Full record + Code's number-by-number verification in
+  `docs/rf-extraction-log.md`.
 - **v0.1 (2026-07-17)** — Initial brief drafted by Claude Code, pre-grounded with
   a 3-lens fact pass (ESP32-S3 RF/timing, the fielded SAR-beacon landscape, FCC
-  Part 15 + DF physics). Awaiting Science's first pass (Tier 0 + Tier 1 first).
+  Part 15 + DF physics).
+
+### ✔ PASS 1 VERDICT (2026-07-17) — feasibility CLOSED
+- **Tier 0:** (A) coherent beam = NO-GO · (B) RF chirp = NO-GO · (C) "chase" = a
+  MAC schedule only, no value · **(D) coded cadence = the surviving, useful form.**
+- **Tier 1:** 2.4 GHz is a *category error* for through-medium locating —
+  near-field magnetic (457 kHz) vs far-field E-field (2.4 GHz); the link **"works
+  where not needed (open air), fails where needed (buried/body-shadowed)."**
+- **Tier 2:** coordination buys identity + a detectable cadence, **not** range/DF/
+  penetration; coherent N² gain unreachable; sweeping ≯ one good coded node.
+- **Tier 3:** no legal high-power point (§15.249 ≈ −1.2 dBm; the spread-spectrum
+  vs sweep pincer; self-jams the mesh).
+- **Tier 4:** marginal value over the existing RSSI/PDR map where the map works,
+  zero where the band fails.
+- **Tier 5:** **build (D)** + **elevate FTM RTT** (the real upside) + through-medium
+  = a *separate* device. Dead ends: (A),(B), high-power 2.4 GHz through-rubble.
+
+*(Agenda below is the original Pass-1 prompt, kept for the record.)*
 
 ---
 
